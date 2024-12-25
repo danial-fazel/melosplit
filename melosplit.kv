@@ -1,0 +1,183 @@
+<MyScreenManager>:
+    LoginScreen:
+    SignupScreen:
+    GroupManagerScreen:
+    AddGroupScreen:
+    MemberInputsScreen:
+    GroupScreen:
+
+<LoginScreen>:
+    name: "login"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: [20, 20]
+        spacing: 15
+
+        MDLabel:
+            text: "Login"
+            font_style: "H4"
+            halign: "center"
+
+        MDTextField:
+            id: email_input
+            hint_text: "Email"
+            mode: "rectangle"
+
+        MDTextField:
+            id: password_input
+            hint_text: "Password"
+            password: True
+            mode: "rectangle"
+
+        MDRaisedButton:
+            text: "Login"
+            on_release: root.login()
+
+        MDTextButton:
+            text: "Don't have an account? Sign up here."
+            on_release: app.root.current = "signup"
+
+<SignupScreen>:
+    name: "signup"
+    BoxLayout:
+        orientation: 'vertical'
+        padding: [20, 20]
+        spacing: 15
+
+        MDLabel:
+            text: "Sign Up"
+            font_style: "H4"
+            halign: "center"
+
+        MDTextField:
+            id: email_input
+            hint_text: "Email"
+            mode: "rectangle"
+
+        MDTextField:
+            id: password_input
+            hint_text: "Password"
+            password: True
+            mode: "rectangle"
+
+        MDRaisedButton:
+            text: "Sign Up"
+            on_release: root.signup()
+
+        MDTextButton:
+            text: "Already have an account? Login here."
+            on_release: app.root.current = "login"
+
+
+<GroupManagerScreen>:
+    name: "group_manager"
+    BoxLayout:
+        orientation: "vertical"
+        padding: 20
+        spacing: 15
+
+        MDLabel:
+            text: "Group Manager"
+            font_style: "H4"
+            halign: "center"
+
+        ScrollView:
+            MDList:
+                id: group_list
+
+        MDRaisedButton:
+            text: "Add Group"
+            on_release: root.manager.current = "add_group_screen"
+
+        MDRaisedButton:
+            text: "Go to User Profile"
+            on_release: root.manager.current = "user_profile"
+
+<AddGroupScreen>:
+    name: "add_group_screen"
+    BoxLayout:
+        orientation: "vertical"
+        padding: 20
+        spacing: 15
+
+        MDLabel:
+            text: "Add Group"
+            font_style: "H4"
+            halign: "center"
+
+        MDTextField:
+            id: group_name_input
+            hint_text: "Group Name"
+            mode: "rectangle"
+
+        MDTextField:
+            id: num_members_input
+            hint_text: "Number of Members"
+            input_filter: "int"
+            mode: "rectangle"
+
+        MDRaisedButton:
+            text: "Next"
+            on_release: root.next_step()
+
+        MDRaisedButton:
+            text: "Back"
+            on_release: root.manager.current = "group_manager"
+
+<MemberInputsScreen>:
+    name: "member_inputs_screen"
+    BoxLayout:
+        orientation: "vertical"
+        padding: 20
+        spacing: 15
+
+        ScrollView:
+            MDList:
+                id: member_inputs_list
+
+        MDRaisedButton:
+            text: "Submit"
+            on_release: root.submit_group()
+
+        MDRaisedButton:
+            text: "Back"
+            on_release: root.manager.current = "add_group_screen"
+
+<MemberTemplate>:
+    orientation: "horizontal"
+    spacing: 10
+    size_hint_y: None
+    height: dp(56)
+
+    MDTextField:
+        id: member_name
+        hint_text: "Member Name"
+        mode: "rectangle"
+
+    MDTextField:
+        id: member_email
+        hint_text: "Member Email (optional)"
+        mode: "rectangle"
+
+        
+
+<GroupScreen>:
+    name: "group_screen"
+    BoxLayout:
+        orientation: "vertical"
+        padding: 20
+        spacing: 15
+
+        MDLabel:
+            id: group_title
+            text: "Group Screen"
+            font_style: "H4"
+            halign: "center"
+
+        ScrollView:
+            MDList:
+                id: member_list
+
+        MDRaisedButton:
+            text: "Back"
+            on_release: root.manager.current = "group_manager"

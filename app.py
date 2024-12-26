@@ -7,8 +7,19 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton, MDFlatButton
 import re
 from kivymd.toast import toast
-from logic import Graph  
+from logic import Graph 
+from logic import Bill 
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivy.properties import StringProperty
+from datetime import datetime
+from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.list import OneLineAvatarIconListItem
+from kivymd.uix.selectioncontrol import MDCheckbox
+from kivy.metrics import dp
+from kivy.uix.screenmanager import Screen
+from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.list import OneLineListItem
 
 # Firebase imports
 import firebase_admin
@@ -115,10 +126,11 @@ class GroupManagerScreen(Screen):
         group_list = self.ids.group_list
         group_list.clear_widgets()
         for group_name in groups:
+            # Properly handle the button instance passed by on_release
             group_list.add_widget(
                 MDRaisedButton(
                     text=group_name,
-                    on_release=lambda x=group_name: self.go_to_group_screen(x),
+                    on_release=lambda btn, group=group_name: self.go_to_group_screen(group),
                 )
             )
 
@@ -216,25 +228,33 @@ class MemberInputsScreen(Screen):
 
 class GroupScreen(Screen):
     def on_enter(self):
+        """Set group title and load transaction history when entering the screen."""
         group_name = App.get_running_app().group_name
         self.ids.group_title.text = f"Group: {group_name}"
+        self.transactions_history()
 
     def transactions_history(self):
-        pass
-        # group_name = App.get_running_app().group_name
-        # group_ref = db.reference(f"groups/{group_name}")
-        # group_data = group_ref.get()
-        # if group_data:
-        #     members = group_data["members"]
-        #     for member in members:
-        #         if member["uid"]:
-        #             user_ref = db.reference(f"/users/{member['uid']}")
-        #             user_data = user_ref.get()
-        #             if user_data:
-        #                 self.ids.transactions_history.append_widget(TransactionHistoryWidget(user_data["name"], user_data["uid"]
-        #                                                                                      , group_name))
-        #             else:
-        #                 self.ids.transactions_history.append_widget(TransactionHistoryWidget(member["name"], None, group_name))
+        """Load and display transaction history."""
+        group_name = App.get_running_app().group_name
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transactions = transaction_ref.get() or {}
+
+        transactions_history = self.ids.transactions_history
+        transactions_history.clear_widgets()
+
+        for transaction_id, transaction in transactions.items():
+            if isinstance(transaction, dict):  # Ensure transaction is a dictionary
+                transaction_widget = TransactionHistoryWidget(
+                    payer=transaction.get("payer", "Unknown"),
+                    participants=", ".join(transaction.get("participants", [])),
+                    amount=str(transaction.get("amount", 0)),
+                    description=transaction.get("description", "No description"),
+                    date=transaction.get("date", "Unknown"),
+                )
+                transactions_history.add_widget(transaction_widget)
+            else:
+                toast(f"Invalid transaction format: {transaction_id}")
+
 
     def members_summary(self):
         pass
@@ -245,15 +265,209 @@ class GroupScreen(Screen):
     def settle_ups(Self):
         pass
 
+class TransactionHistoryWidget(MDBoxLayout):
+    payer = StringProperty()
+    participants = StringProperty()
+    amount = StringProperty()
+    description = StringProperty()
+    date = StringProperty()
+
 
 class MemberSummaryScreen(Screen):
     """the list of members with their net balances and a button to a screen to show the graph visualisation"""
     pass 
 
-class AddExpencesScreen(Screen):
-    """choosing different modes of split and the payer and the people in share and the amount and the category and also maybe a note, then using the logic in graph for calculating stuff and add in the database"""
-    """also an optinal feature to access a site for different currencies global"""
-    pass
+class AddExpenseScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.split_type_items = [
+            {"text": "Equally", "viewclass": "OneLineListItem", "on_release": lambda x="Equally": self.set_split_type(x)},
+            {"text": "By Percentage", "viewclass": "OneLineListItem", "on_release": lambda x="By Percentage": self.set_split_type(x)},
+            {"text": "By Shares", "viewclass": "OneLineListItem", "on_release": lambda x="By Shares": self.set_split_type(x)},
+            {"text": "Custom", "viewclass": "OneLineListItem", "on_release": lambda x="Custom": self.set_split_type(x)},
+        ]
+
+        self.category_items = [
+            {"text": "Food", "viewclass": "OneLineListItem", "on_release": lambda x="Food": self.set_category(x)},
+            {"text": "Transport", "viewclass": "OneLineListItem", "on_release": lambda x="Transport": self.set_category(x)},
+            {"text": "Utilities", "viewclass": "OneLineListItem", "on_release": lambda x="Utilities": self.set_category(x)},
+            {"text": "Miscellaneous", "viewclass": "OneLineListItem", "on_release": lambda x="Miscellaneous": self.set_category(x)},
+        ]
+
+        self.split_type_menu = MDDropdownMenu(items=self.split_type_items, width_mult=4)
+        self.category_menu = MDDropdownMenu(items=self.category_items, width_mult=4)
+
+        self.participants_dialog = None  # To manage the participants dialog
+        self.selected_participants = set()
+
+    def open_split_type_menu(self, button):
+        """Open split type menu safely."""
+        if not self.split_type_menu.parent:
+            self.split_type_menu.caller = button
+            self.split_type_menu.open()
+
+
+
+    def set_split_type(self, value):
+        self.ids.split_type.text = value
+        self.split_type_menu.dismiss()
+
+    def open_split_type_menu(self, button):
+        """Open split type menu safely."""
+        if not self.split_type_menu.parent:
+            self.split_type_menu.caller = button
+            self.split_type_menu.open()
+
+    def open_category_menu(self, button):
+        """Open category menu safely."""
+        if not self.category_menu.parent:
+            self.category_menu.caller = button
+            self.category_menu.open()
+
+
+    def set_category(self, value):
+        self.ids.category.text = value
+        self.category_menu.dismiss()
+
+    def open_participants_dialog(self):
+        def populate_dialog(*args):
+            participant_list = self.participants_dialog.content_cls.ids.participant_list
+            participant_list.clear_widgets()
+
+            # Fetch group data and populate the list
+            group_name = App.get_running_app().group_name
+            group_ref = db.reference(f"groups/{group_name}")
+            group_data = group_ref.get()
+
+            if group_data and "members" in group_data:
+                for uid, name in group_data["members"].items():
+                    print(f"Adding participant: {name} (UID: {uid})")
+                    participant_item = ParticipantListItem(uid=uid, text=name)
+                    participant_list.add_widget(ParticipantListItem(uid="test", text="Test User"))
+
+
+        # Create the dialog
+        if not hasattr(self, "participants_dialog") or not self.participants_dialog:
+            self.participants_dialog = MDDialog(
+                title="Select Participants",
+                type="custom",
+                content_cls=ParticipantDialogContent(),
+                buttons=[
+                    MDRaisedButton(
+                        text="CLOSE", on_release=lambda _: self.participants_dialog.dismiss()
+                    ),
+                ],
+            )
+            self.participants_dialog.bind(on_open=populate_dialog)
+
+        # Open the dialog
+        self.participants_dialog.open()
+
+
+
+
+
+    def toggle_participant(self, checkbox, uid):
+        """Toggle participant selection."""
+        if checkbox.active:
+            self.selected_participants.add(uid)
+        else:
+            self.selected_participants.discard(uid)
+
+        # Update selected participants label
+        participant_names = ", ".join(self.selected_participants)
+        self.ids.selected_participants_label.text = f"Selected Participants: {participant_names}"
+
+
+
+    def add_expense(self):
+        """Add expense using logic and save it to Firebase."""
+        payer = self.ids.payer_name.text.strip()
+        amount = self.ids.amount.text.strip()
+        split_type = self.ids.split_type.text.strip()
+        category = self.ids.category.text.strip()
+        description = self.ids.description.text.strip()
+
+        if not payer or not amount or not split_type or not category:
+            self.ids.error_label.text = "All fields except description are required!"
+            return
+
+        if not self.selected_participants:
+            self.ids.error_label.text = "At least one participant must be selected!"
+            return
+
+        # Convert amount to float
+        try:
+            amount = float(amount)
+        except ValueError:
+            self.ids.error_label.text = "Invalid amount!"
+            return
+
+        # Prepare custom splits or percentages for specific modes
+        custom_splits = {}
+        if split_type in ["By Shares", "By Percentage"]:
+            for uid in self.selected_participants:
+                input_id = f"{'share' if split_type == 'By Shares' else 'percentage'}_{uid}"
+                try:
+                    value = float(self.ids[input_id].text.strip())
+                    custom_splits[uid] = value
+                except (KeyError, ValueError):
+                    self.ids.error_label.text = f"Invalid value for participant {uid}!"
+                    return
+
+        # Initialize or load the group graph
+        group_name = App.get_running_app().group_name
+        group_graph = self.get_group_graph(group_name)
+
+        # Add the bill to the graph
+        group_graph.add_bill(
+            Bill(
+                payer=payer,
+                amount=amount,
+                participants=list(self.selected_participants),
+                category=category,
+            ),
+            split_type=split_type,
+            custom_splits=custom_splits,
+        )
+
+        # Save transaction to Firebase
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transaction_ref.push({
+            "payer": payer,
+            "participants": list(self.selected_participants),
+            "amount": amount,
+            "category": category,
+            "split_type": split_type,
+            "custom_splits": custom_splits,
+            "description": description,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+        # Clear inputs and provide feedback
+        self.clear_inputs()
+        toast("Expense added successfully.")
+        self.manager.current = "group_screen"
+
+    def get_group_graph(self, group_name):
+        """Retrieve or initialize the graph for a specific group."""
+        group_ref = db.reference(f"groups/{group_name}/graph")
+        group_graph = Graph()
+        return group_graph
+
+    def clear_inputs(self):
+        """Clear all input fields."""
+        self.ids.payer_name.text = ""
+        self.ids.amount.text = ""
+        self.ids.split_type.text = ""
+        self.ids.category.text = ""
+        self.ids.description.text = ""
+        self.selected_participants.clear()
+
+    def highlight_selected_participants(self):
+        pass
+
 
 class SettleUpScreen(Screen):
     """in the main screen using minimize cash flow func of the logic to dispaly the simplified transactions and a key to add expence as in payer and the payee for settling debts"""
@@ -264,11 +478,81 @@ class UserProfileScreen():
     pass
 
 
+
+class ParticipantListItem(OneLineAvatarIconListItem):
+    uid = StringProperty("")
+    text = StringProperty("")
+
+    def toggle_participant(self):
+        """Toggle this participant in AddExpenseScreen."""
+        screen = App.get_running_app().root.get_screen("add_expense_screen")  # Get the AddExpenseScreen
+        if self.uid in screen.selected_participants:
+            screen.selected_participants.remove(self.uid)
+            self.ids.checkbox.icon = "checkbox-blank-outline"  # Uncheck
+        else:
+            screen.selected_participants.add(self.uid)
+            self.ids.checkbox.icon = "checkbox-marked"  # Check
+
+
+
+
+class ParticipantDialogContent(MDBoxLayout):
+    """Content for the participant selection dialog."""
+    pass
+
+
 class MyScreenManager(ScreenManager):
     pass
 
 class MeloSplit(MDApp):
-    user_uid = "test_user_uid"  # Temporary for testing
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.participants_dialog = None
+
+    def show_participants_dialog(self):
+        # Load dialog if not already loaded
+        if not self.participants_dialog:
+            self.participants_dialog = MDDialog(
+                title="Select Participants",
+                type="custom",
+                content_cls=ParticipantDialogContent(),
+                buttons=[
+                    MDRaisedButton(text="CANCEL", on_release=self.close_dialog),
+                    MDRaisedButton(text="OK", on_release=self.submit_participants),
+                ],
+            )
+        # Populate the list
+        self.populate_participants()
+        self.participants_dialog.open()
+
+    def populate_participants(self):
+        participant_list = self.participants_dialog.content_cls.ids.participant_list
+        participant_list.clear_widgets()  # Clear old data
+
+        participants = {
+            "dani": "Dani",
+            "emad": "Emad",
+            "melo": "Melo",
+            "mhdi": "Mhdi",
+        }
+
+        # Dynamically add participants to the list
+        for uid, name in participants.items():
+            item = OneLineListItem(text=name)
+            participant_list.add_widget(item)
+
+    def close_dialog(self, *args):
+        if self.participants_dialog:
+            self.participants_dialog.dismiss()
+
+    def submit_participants(self, *args):
+        # Logic to handle submission of selected participants
+        print("Participants submitted (TODO)")
+
+
+    def set_dropdown_value(self, selected_value):
+        self.root.ids.split_type.text = selected_value
+        self.root.ids.split_type_menu.dismiss()
 
     def build(self):
         self.theme_cls.primary_palette = "Blue"

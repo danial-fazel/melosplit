@@ -5,6 +5,7 @@
     AddGroupScreen:
     MemberInputsScreen:
     GroupScreen:
+    AddExpenseScreen:
 
 <LoginScreen>:
     name: "login"
@@ -159,7 +160,7 @@
         hint_text: "Member Email (optional)"
         mode: "rectangle"
 
-        
+
 
 <GroupScreen>:
     name: "group_screen"
@@ -176,8 +177,120 @@
 
         ScrollView:
             MDList:
-                id: member_list
+                id: transactions_history
+
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: dp(56)
+            spacing: 10
+
+            MDRaisedButton:
+                text: "Member Summary"
+                on_release: app.root.current = "member_summary_screen"
+
+            MDRaisedButton:
+                text: "Add Expenses"
+                on_release: app.root.current = "add_expense_screen"
+
+            MDRaisedButton:
+                text: "Settle Up"
+                on_release: app.root.current = "settle_up_screen"
+
+<TransactionHistoryWidget@BoxLayout>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: dp(80)
+    padding: 10
+    spacing: 5
+
+    MDLabel:
+        text: f"[b]Payer:[/b] {root.payer}"
+        markup: True
+        font_size: dp(14)
+
+    MDLabel:
+        text: f"[b]Participants:[/b] {root.participants}"
+        markup: True
+        font_size: dp(14)
+
+    MDLabel:
+        text: f"[b]Amount:[/b] {root.amount} USD"
+        markup: True
+        font_size: dp(14)
+
+    MDLabel:
+        text: f"[b]Description:[/b] {root.description}"
+        markup: True
+        font_size: dp(14)
+
+    MDLabel:
+        text: f"[b]Date:[/b] {root.date}"
+        markup: True
+        font_size: dp(12)
+
+<AddExpenseScreen>:
+    name: "add_expense_screen"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(20)
+        spacing: dp(10)
+
+        MDTextField:
+            id: payer_name
+            hint_text: "Payer Name"
+
+        MDTextField:
+            id: amount
+            hint_text: "Amount"
+            input_filter: "float"
+
+        MDTextField:
+            id: split_type
+            hint_text: "Split Type"
+            on_focus: root.open_split_type_menu(self)
+
+        MDTextField:
+            id: category
+            hint_text: "Category"
+            on_focus: root.open_category_menu(self)
+
+        MDRaisedButton:
+            text: "Select Participants"
+            on_release: root.open_participants_dialog()
+
+        MDLabel:
+            id: selected_participants_label
+            text: "Selected Participants: None"
+            halign: "center"
+
+        MDTextField:
+            id: description
+            hint_text: "Description (Optional)"
+
+        MDLabel:
+            id: error_label
+            text: ""
+            color: 1, 0, 0, 1  # Red color for error messages
+            halign: "center"
+
+        MDRaisedButton:
+            text: "Submit"
+            on_release: root.add_expense()
+
+        ScrollView:
+            MDList:
+                id: participant_list
 
         MDRaisedButton:
             text: "Back"
-            on_release: root.manager.current = "group_manager"
+            on_release: app.root.current = "group_screen"
+            
+<ParticipantDialogContent>:
+    ScrollView:
+        MDList:
+            id: participant_list
+
+
+

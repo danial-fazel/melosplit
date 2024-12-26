@@ -153,13 +153,13 @@ class Graph:
         }
 
         # Add the bill based on the split type
-        if split_type == "equal":
+        if split_type == "Equally":
             split_amount = bill.amount / len(bill.participants)
             for participant in bill.participants:
                 if participant != bill.payer:
                     self.add_transaction(bill.payer, participant, split_amount)
 
-        elif split_type == "unequal":
+        elif split_type == "Custom":
             if not custom_splits:
                 raise ValueError("Custom splits required for 'unequal' mode.")
             total_split = sum(custom_splits.values())
@@ -169,7 +169,7 @@ class Graph:
                 if participant != bill.payer:
                     self.add_transaction(bill.payer, participant, amount)
 
-        elif split_type == "percentage":
+        elif split_type == "By Percentage":
             if not custom_splits:
                 raise ValueError("Custom splits required for 'percentage' mode.")
             total_percentage = sum(custom_splits.values())
@@ -179,7 +179,7 @@ class Graph:
                 if participant != bill.payer:
                     self.add_transaction(bill.payer, participant, (bill.amount * percentage / 100))
 
-        elif split_type == "shares":
+        elif split_type == "By Shares":
             if not custom_splits:
                 raise ValueError("Custom splits required for 'shares' mode.")
             total_shares = sum(custom_splits.values())

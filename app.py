@@ -307,8 +307,6 @@ class AddExpenseScreen(Screen):
             self.split_type_menu.caller = button
             self.split_type_menu.open()
 
-
-
     def set_split_type(self, value):
         self.ids.split_type.text = value
         self.split_type_menu.dismiss()
@@ -330,56 +328,31 @@ class AddExpenseScreen(Screen):
         self.ids.category.text = value
         self.category_menu.dismiss()
 
-    def open_participants_dialog(self):
-        def populate_dialog(*args):
-            participant_list = self.participants_dialog.content_cls.ids.participant_list
-            participant_list.clear_widgets()
+    def open_participant_dialog(self):
+        """Open participant dialog with input fields based on split type."""
+        split_type = self.ids.split_type.text
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
 
-            # Fetch group data and populate the list
-            group_name = App.get_running_app().group_name
-            group_ref = db.reference(f"groups/{group_name}")
-            group_data = group_ref.get()
+        if not group_data or "members" not in group_data:
+            toast("No participants available in this group.")
+            return
 
-            if group_data and "members" in group_data:
-                for uid, name in group_data["members"].items():
-                    print(f"Adding participant: {name} (UID: {uid})")
-                    participant_item = ParticipantListItem(uid=uid, text=name)
-                    participant_list.add_widget(ParticipantListItem(uid="test", text="Test User"))
-
-
-        # Create the dialog
-        if not hasattr(self, "participants_dialog") or not self.participants_dialog:
-            self.participants_dialog = MDDialog(
-                title="Select Participants",
-                type="custom",
-                content_cls=ParticipantDialogContent(),
-                buttons=[
-                    MDRaisedButton(
-                        text="CLOSE", on_release=lambda _: self.participants_dialog.dismiss()
-                    ),
-                ],
-            )
-            self.participants_dialog.bind(on_open=populate_dialog)
-
-        # Open the dialog
-        self.participants_dialog.open()
+        participants = group_data["members"]
+        self.dialog = ParticipantDialog(participants, self.update_selected_participants, split_type)
+        self.dialog.open()
 
 
-
-
-
-    def toggle_participant(self, checkbox, uid):
-        """Toggle participant selection."""
-        if checkbox.active:
-            self.selected_participants.add(uid)
-        else:
-            self.selected_participants.discard(uid)
-
-        # Update selected participants label
-        participant_names = ", ".join(self.selected_participants)
-        self.ids.selected_participants_label.text = f"Selected Participants: {participant_names}"
-
-
+    def update_selected_participants(self, selected_participants):
+        """Update the UI and internal state with selected participants and values."""
+        self.selected_participants = selected_participants
+        participant_text = ", ".join(
+            f"{name} ({value})" for name, value in selected_participants.items()
+        )
+        self.ids.selected_participants_label.text = (
+            f"Selected: {participant_text}" if participant_text else "None"
+        )
 
     def add_expense(self):
         """Add expense using logic and save it to Firebase."""
@@ -405,16 +378,18 @@ class AddExpenseScreen(Screen):
             return
 
         # Prepare custom splits or percentages for specific modes
-        custom_splits = {}
-        if split_type in ["By Shares", "By Percentage"]:
-            for uid in self.selected_participants:
-                input_id = f"{'share' if split_type == 'By Shares' else 'percentage'}_{uid}"
-                try:
-                    value = float(self.ids[input_id].text.strip())
-                    custom_splits[uid] = value
-                except (KeyError, ValueError):
-                    self.ids.error_label.text = f"Invalid value for participant {uid}!"
-                    return
+        custom_splits = self.selected_participants
+
+        if split_type == "By Shares" and sum(custom_splits.values()) <= 0:
+            self.ids.error_label.text = "Total shares must be greater than zero!"
+            return
+        if split_type == "By Percentage" and abs(sum(custom_splits.values()) - 100) > 0.01:
+            self.ids.error_label.text = "Total percentage must equal 100!"
+            return
+        if split_type == "Custom" and abs(sum(custom_splits.values()) - amount) > 0.01:
+            self.ids.error_label.text = "Custom amounts must sum to the total amount!"
+            return
+
 
         # Initialize or load the group graph
         group_name = App.get_running_app().group_name
@@ -468,6 +443,109 @@ class AddExpenseScreen(Screen):
     def highlight_selected_participants(self):
         pass
 
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.button import MDRaisedButton, MDFlatButton
+from kivymd.uix.label import MDLabel
+from kivymd.uix.textfield import MDTextField
+from kivymd.uix.list import OneLineListItem, MDList
+from kivy.uix.scrollview import ScrollView
+
+
+class ParticipantDialog:
+    def __init__(self, participants, on_submit, split_type="Equally"):
+        """
+        :param participants: List of participant names.
+        :param on_submit: Callback function to handle selected participants.
+        :param split_type: The split type (e.g., "Equally", "By Percentage", "By Shares", "Custom").
+        """
+        self.participants = participants
+        self.split_type = split_type
+        self.selected_participants = {}
+        self.on_submit = on_submit
+
+        # Create dialog content
+        self.dialog_content = MDBoxLayout(orientation="vertical", spacing=10, size_hint_y=None)
+        self.dialog_content.height = len(participants) * 60 + 20
+
+        scroll = ScrollView()
+        list_view = MDList()
+
+        # Add participant inputs or checkboxes
+        for name in participants:
+            item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
+
+            if split_type == "Equally":
+                # For "Equally", use checkboxes only
+                checkbox = MDCheckbox(size_hint_x=0.1)
+                checkbox.bind(active=lambda _, active, name=name: self.toggle_selection(active, name))
+                item.add_widget(checkbox)
+            else:
+                # For other split types, use input fields only
+                input_field = MDTextField(
+                    hint_text=self.get_hint_text(),
+                    size_hint_x=0.4,
+                    halign="center",
+                    pos_hint={"center_y": 0.5},  # Adjust alignment
+                )
+                item.add_widget(input_field)
+                self.selected_participants[name] = {"selected": True, "value": input_field}
+
+            label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
+            item.add_widget(label)
+
+            list_view.add_widget(item)
+
+        scroll.add_widget(list_view)
+        self.dialog_content.add_widget(scroll)
+
+        # Create dialog
+        self.dialog = MDDialog(
+            title=f"Select Participants ({split_type})",
+            type="custom",
+            content_cls=self.dialog_content,
+            buttons=[
+                MDFlatButton(text="CANCEL", on_release=self.dismiss),
+                MDRaisedButton(text="OK", on_release=self.submit),
+            ],
+        )
+
+    def open(self):
+        """Open the dialog."""
+        self.dialog.open()
+
+    def dismiss(self, *args):
+        """Close the dialog."""
+        self.dialog.dismiss()
+
+    def toggle_selection(self, active, name):
+        """Toggle participant selection."""
+        if self.split_type == "Equally":
+            self.selected_participants[name] = {"selected": active}
+
+    def submit(self, *args):
+        """Submit selected participants and values."""
+        if self.split_type == "Equally":
+            selected = {name: 0 for name, field in self.selected_participants.items() if field["selected"]}
+        else:
+            selected = {
+                name: float(field["value"].text) if field["value"].text.strip() else 0
+                for name, field in self.selected_participants.items()
+            }
+
+        self.on_submit(selected)
+        self.dismiss()
+
+    def get_hint_text(self):
+        """Return appropriate hint text based on the split type."""
+        if self.split_type == "By Shares":
+            return "Enter shares"
+        elif self.split_type == "By Percentage":
+            return "Enter %"
+        elif self.split_type == "Custom":
+            return "Enter amount"
+        else:
+            return ""
 
 class SettleUpScreen(Screen):
     """in the main screen using minimize cash flow func of the logic to dispaly the simplified transactions and a key to add expence as in payer and the payee for settling debts"""
@@ -481,17 +559,12 @@ class UserProfileScreen():
 
 class ParticipantListItem(OneLineAvatarIconListItem):
     uid = StringProperty("")
-    text = StringProperty("")
 
     def toggle_participant(self):
-        """Toggle this participant in AddExpenseScreen."""
-        screen = App.get_running_app().root.get_screen("add_expense_screen")  # Get the AddExpenseScreen
-        if self.uid in screen.selected_participants:
-            screen.selected_participants.remove(self.uid)
-            self.ids.checkbox.icon = "checkbox-blank-outline"  # Uncheck
-        else:
-            screen.selected_participants.add(self.uid)
-            self.ids.checkbox.icon = "checkbox-marked"  # Check
+        """Toggle participant selection through AddExpenseScreen."""
+        app = App.get_running_app()
+        add_expense_screen = app.root.get_screen("add_expense_screen")
+        add_expense_screen.toggle_participant(self.uid)
 
 
 

@@ -258,7 +258,7 @@
 
         MDRaisedButton:
             text: "Select Participants"
-            on_release: root.open_participants_dialog()
+            on_release: root.open_participant_dialog()
 
         MDLabel:
             id: selected_participants_label
@@ -287,10 +287,16 @@
             text: "Back"
             on_release: app.root.current = "group_screen"
             
+<ParticipantListItem>:
+    uid: ""
+    text: ""
+    IconLeftWidget:
+        id: checkbox
+        icon: "checkbox-blank-outline"
+        on_release: root.toggle_participant()
+
 <ParticipantDialogContent>:
     ScrollView:
         MDList:
             id: participant_list
-
-
 

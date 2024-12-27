@@ -13,6 +13,7 @@ class Group:
         self.name = name
         self.members = set()  # Members in the group
         self.graph = Graph()  # Separate debt graph for this group
+
     def delete_group(self):
         """
         Clear all data associated with the group.
@@ -20,6 +21,7 @@ class Group:
         self.members.clear()
         self.graph = None  # Clear the group's graph
         print(f"Group '{self.name}' has been deleted.")
+
     def remove_member(self, member):
         """
         Remove a member from the group and redistribute their balances.
@@ -45,6 +47,7 @@ class Group:
         # Remove the member
         self.members.remove(member)
         print(f"Member '{member}' has been removed and debts redistributed.")
+        
     def get_summary(self):
         """
         Generate a summary of the group's expenses and balances.

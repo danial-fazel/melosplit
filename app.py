@@ -3,12 +3,12 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
+from kivymd.uix.screen import MDLabel
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton, MDFlatButton
 import re
 from kivymd.toast import toast
-from logic import Graph 
-from logic import Bill 
+from logic import Graph, Group, Bill
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivy.properties import StringProperty
 from datetime import datetime
@@ -32,19 +32,20 @@ firebase_admin.initialize_app(cred, {
 })
 
 def add_user_to_firebase(email, name):
-    uid = email  # Using email as UID
+    at_sign = email.find('@')
+    uid = email[:at_sign] ##
     ref = db.reference("/users/")
-    ref.child(uid).set({"name": name, "email": email})
+    ref.child(email).set({"{uid}": name})
 
-def get_user_groups_from_firebase(uid):
-    groups_ref = db.reference("/groups/")
-    groups = groups_ref.get()
-    user_groups = []
-    if groups:
-        for group_id, group_data in groups.items():
-            if uid in group_data.get("members", []):
-                user_groups.append(group_data.get("name", "Unknown Group"))
-    return user_groups
+# def get_user_groups_from_firebase(uid):
+#     groups_ref = db.reference("/groups/")
+#     groups = groups_ref.get()
+#     user_groups = []
+#     if groups:
+#         for group_id, group_data in groups.items():
+#             if uid in group_data.get("members", []):
+#                 user_groups.append(group_data.get("name", "Unknown Group"))
+#     return user_groups
 
 def local_data():
     """saving data in offline mode, uploadin when got online"""
@@ -61,7 +62,9 @@ class LoginScreen(MDScreen):
         password = self.ids.password_input.text.strip()
         
         # Convert email to a safe key
-        safe_email = re.sub(r'[.#$/\[\]]', '_', email)
+        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
+        at_sign = email.find('@') ##
+        safe_email = email[:at_sign]
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -86,8 +89,10 @@ class SignupScreen(MDScreen):
         email = self.ids.email_input.text.strip()
         password = self.ids.password_input.text.strip()
 
-        # Convert email to a safe key
-        safe_email = re.sub(r'[.#$/\[\]]', '_', email)
+        # # Convert email to a safe key
+        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
+        at_sign = email.find('@') ##
+        safe_email = email[:at_sign]
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -105,7 +110,7 @@ class SignupScreen(MDScreen):
             "password": password,
         })
 
-        App.get_running_app().root.current = "login"  # Redirect to login
+        App.get_running_app().root.current = "group_manager" ##
 
     def show_error(self, message):
         dialog = MDDialog(title="Error", text=message, buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
@@ -274,8 +279,54 @@ class TransactionHistoryWidget(MDBoxLayout):
 
 
 class MemberSummaryScreen(Screen):
-    """the list of members with their net balances and a button to a screen to show the graph visualisation"""
-    pass 
+    def on_enter(self):
+        """Populate the screen with member data when the screen is entered."""
+        self.populate_member_summary()
+
+    def populate_member_summary(self):
+        """Get the group summary and display the member balances."""
+        # Get the group summary
+        group_name = App.get_running_app().group_name
+        group = db.reference(f"groups/{group_name}")
+        
+        summary = group.get_summary()
+        balances = group.get_balances()
+
+        # Clear existing content
+        self.ids.member_list.clear_widgets()
+
+        # Add each member's information
+        for member, balance in balances.items():
+            member_summary = f"{member}: Net Balance: {balance:.2f}"
+            contribution = summary["per_member_contributions"].get(member, 0)
+            member_summary += f", Contribution: {contribution:.2f}"
+
+            # Create a label for the member's data and add it to the list
+            self.ids.member_list.add_widget(
+                MDLabel(text=member_summary, theme_text_color="Secondary", size_hint_y=None, height="40dp")
+            )
+
+        # Display total expenses
+        total_expenses = summary["total_expenses"]
+        self.ids.total_expenses_label.text = f"Total Expenses: {total_expenses:.2f}"
+
+        # Optional: Add category breakdown
+        category_summary = summary["category_summary"]
+        self.ids.category_summary_label.text = "Category Summary: " + ", ".join(
+            [f"{category}: {amount:.2f}" for category, amount in category_summary.items()]
+        )
+        
+    def go_back(self):
+        """Navigate back to the GroupScreen."""
+        self.manager.current = "group_screen"
+
+    def add_expense(self):
+        """Navigate to AddExpenseScreen."""
+        self.manager.current = "add_expense_screen"
+
+    def settle_up(self):
+        """Navigate to SettleUpScreen."""
+        self.manager.current = "settle_up_screen"
 
 class AddExpenseScreen(Screen):
     def __init__(self, **kwargs):

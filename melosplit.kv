@@ -229,6 +229,55 @@
         markup: True
         font_size: dp(12)
 
+<MemberSummaryScreen>:
+    name: "member_summary_screen"
+
+    BoxLayout:
+        orientation: "vertical"
+
+        # Main content: Scrollable list of members' balances and contributions
+        ScrollView:
+            BoxLayout:
+                id: member_list
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+
+        # Total Expenses label
+        MDLabel:
+            id: total_expenses_label
+            text: "Total Expenses: 0.00"
+            theme_text_color: "Primary"
+            size_hint_y: None
+            height: "40dp"
+
+        # Category Summary label
+        MDLabel:
+            id: category_summary_label
+            text: "Category Summary: "
+            theme_text_color: "Secondary"
+            size_hint_y: None
+            height: "40dp"
+
+        # Buttons at the bottom
+        BoxLayout:
+            size_hint_y: None
+            height: "50dp"
+            padding: "10dp"
+            spacing: "10dp"
+
+            MDRaisedButton:
+                text: "Back"
+                on_release: root.go_back()
+
+            MDRaisedButton:
+                text: "Add Expense"
+                on_release: root.add_expense()
+
+            MDRaisedButton:
+                text: "Settle Up"
+                on_release: root.settle_up()
+
 <AddExpenseScreen>:
     name: "add_expense_screen"
 

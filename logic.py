@@ -4,15 +4,15 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
-class Member:
-    def __init__(self, name):
-        self.name = name
+# class Member:  ## 
+#     def __init__(self, name):
+#         self.name = name
 
 class Group:
-    def __init__(self, name):
+    def __init__(self, name, members={}, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
         self.name = name
-        self.members = set()  # Members in the group
-        self.graph = Graph()  # Separate debt graph for this group
+        self.members = members  # Members in the group
+        self.graph = Graph(edges, transactions, recurring_bills, category_totals)  # Separate debt graph for this group
 
     def delete_group(self):
         """
@@ -47,7 +47,7 @@ class Group:
         # Remove the member
         self.members.remove(member)
         print(f"Member '{member}' has been removed and debts redistributed.")
-        
+
     def get_summary(self):
         """
         Generate a summary of the group's expenses and balances.
@@ -116,11 +116,11 @@ class Bill:
 
 
 class Graph:
-    def __init__(self):
-        self.edges = defaultdict(lambda: defaultdict(float))
-        self.transactions = []  # Store all transaction history
-        self.recurring_bills = []  # Store recurring bills
-        self.category_totals = defaultdict(float)  # Store totals for each category
+    def __init__(self, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
+        self.edges = edges
+        self.transactions = transactions  # Store all transaction history
+        self.recurring_bills = recurring_bills  # Store recurring bills
+        self.category_totals = category_totals  # Store totals for each category
 
     def add_recurring_bill(self, bill):
         """

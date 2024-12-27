@@ -3,7 +3,7 @@ from kivy.lang import Builder
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.screen import MDLabel
+from kivymd.uix.label import MDLabel
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton, MDFlatButton
 import re
@@ -13,7 +13,6 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivy.properties import StringProperty
 from datetime import datetime
 from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.dialog import MDDialog
 from kivymd.uix.list import OneLineAvatarIconListItem
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivy.metrics import dp
@@ -75,6 +74,7 @@ class LoginScreen(MDScreen):
         user_data = user_ref.get()
 
         if user_data and user_data.get("password") == password:
+            App.get_running_app().user_email = email  ##
             App.get_running_app().user_uid = safe_email  # Store UID for future use
             App.get_running_app().root.current = "group_manager"
         else:
@@ -110,7 +110,9 @@ class SignupScreen(MDScreen):
             "password": password,
         })
 
-        App.get_running_app().root.current = "group_manager" ##
+        App.get_running_app().user_email = email  ##
+        App.get_running_app().user_uid = safe_email
+        App.get_running_app().root.current = "group_manager"
 
     def show_error(self, message):
         dialog = MDDialog(title="Error", text=message, buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
@@ -180,6 +182,10 @@ class MemberInputsScreen(Screen):
         for _ in range(num_members):
             member_widget = MemberTemplate()  # Create a new instance of MemberTemplate
             member_list.add_widget(member_widget)
+            if _ == 0:  # For the first member
+                member_widget.ids.member_name.text = App.get_running_app().user_uid ##
+                member_widget.ids.member_email.text = App.get_running_app().user_email ##
+
 
     def submit_group(self):
         """Add group to Firebase, validate emails, and initialize the graph."""
@@ -194,38 +200,40 @@ class MemberInputsScreen(Screen):
             if name:
                 if email:
                     # Validate email and fetch UID
-                    safe_email = re.sub(r"[.#$/\[\]]", "_", email)
-                    user_ref = db.reference(f"/users/{safe_email}")
-                    user_data = user_ref.get()
-                    if user_data:
-                        members.append({"uid": safe_email, "name": name})
-                    else:
-                        toast(f"User with email {email} does not exist.")
-                        return
+                    member_uid = email.split('@')[0] ##
+                    # user_ref = db.reference(f"/users/{member_uid}")
+                    # user_data = user_ref.get()
+                    # if user_data:
+                    members.append({"uid": member_uid, "name": name})  ##
+                    # else:
+                    #     toast(f"User with email {email} does not exist.")
+                    #     return
                 else:
                     members.append({"uid": None, "name": name})
 
-        if not members:
-            toast("Please enter at least one member.")
+        if len(members) < 2:
+            toast("A group must have 2 members at least.")  ##
             return
 
         # Save the group to Firebase
         user_uid = App.get_running_app().user_uid
         group_ref = db.reference(f"groups/{group_name}")
-        group_data = {
+        members_data = {
             "members": {m["uid"] or m["name"]: m["name"] for m in members},
         }
-        group_ref.set(group_data)
+        group_ref.set(members_data)
 
-        # Add the group to the user's groups
+        # Add the group to the user's groups;
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
-        user_groups_ref.update({group_name: "Member"})
+        user_groups_ref.update({group_name: 0})  ##
 
         # Initialize the group graph
-        group_graph = Graph()
+        the_group = Group(group_name, members_data)  ##
         for member in members:
-            if member["uid"]:
-                group_graph.add_transaction(member["uid"], user_uid, 0)
+            member_id = member["uid"] or member["name"]  # Use UID if available, otherwise use the name
+            if member_id:
+                the_group.add_transaction(member_id, user_uid, 0)
+
 
         toast(f"Group '{group_name}' created.")
         self.manager.current = "group_manager"

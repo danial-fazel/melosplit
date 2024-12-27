@@ -1,7 +1,9 @@
-# text = 'nazaninmoh88@yahoo.com'
-# at = text.find('@')
-# i = text[:at]
-# print(i)
+# members = []
+# for _ in range(5):
+#     text = input("Enter email adress: ")
+#     at = text.find('@')
+#     i = text[:at]
+#     members.append(i)
 
 # groups = ['add', 'dff', 'nvg', 'erh', 'oij', 'shd', {'m', 2,4}, (2, 4, 'df')]
 # # groups = "asdfghjkloiuytrew"

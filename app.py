@@ -226,14 +226,30 @@ class MemberInputsScreen(Screen):
         # Add the group to the user's groups;
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
         user_groups_ref.update({group_name: 0})  ##
+        # and to the registered members' groups:
+        for member in members:
+            if member['uid']:
+                member_ref = db.reference(f"/users/{member['uid']}")
+                member_data = member_ref.get()
+                if member_data:
+                    member_groups_ref = db.reference(f"/users/{member['uid']}/groups")
+                    member_groups_ref.update({group_name: 0})
+
+
+        # current_users_list_ref = db.reference(f"users")
+        # for member in members:
+        #     if member["uid"]:
+        #         for uid in dict(current_users_list_ref):
+        #             if member["uid"] == uid:
+        #                 member_groups_ref = db.reference(f"users/{member}/groups")
+        #                 member_groups_ref.update({group_name: 0})
 
         # Initialize the group graph
         the_group = Group(group_name, members_data)  ##
         for member in members:
             member_id = member["uid"] or member["name"]  # Use UID if available, otherwise use the name
             if member_id:
-                the_group.add_transaction(member_id, user_uid, 0)
-
+                the_group.graph.add_transaction(member_id, user_uid, 0)
 
         toast(f"Group '{group_name}' created.")
         self.manager.current = "group_manager"
@@ -268,7 +284,6 @@ class GroupScreen(Screen):
             else:
                 toast(f"Invalid transaction format: {transaction_id}")
 
-
     def members_summary(self):
         pass
 
@@ -284,7 +299,6 @@ class TransactionHistoryWidget(MDBoxLayout):
     amount = StringProperty()
     description = StringProperty()
     date = StringProperty()
-
 
 class MemberSummaryScreen(Screen):
     def on_enter(self):

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 #         self.name = name
 
 class Group:
-    def __init__(self, name, members={}, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
+    def __init__(self, name, members=set(), edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
         self.name = name
         self.members = members  # Members in the group
         self.graph = Graph(edges, transactions, recurring_bills, category_totals)  # Separate debt graph for this group
@@ -69,7 +69,7 @@ class Group:
         """Add a member to the group."""
         self.members.add(member)
 
-    def add_bill(self, bill, split_type="equal", custom_splits=None):
+    def add_bill(self, bill, split_type="Equally", custom_splits=None):
         """
         Add a bill to the group's graph.
         """
@@ -142,7 +142,7 @@ class Graph:
                 # Update the next due date
                 bill.update_next_due_date()
 
-    def add_bill(self, bill, split_type="equal", custom_splits=None):
+    def add_bill(self, bill, split_type="Equally", custom_splits=None):
         """
         Add a bill and log it in the transaction history.
         """
@@ -192,7 +192,7 @@ class Graph:
                     self.add_transaction(bill.payer, participant, share_amount)
 
         else:
-            raise ValueError("Invalid split type. Use 'equal', 'unequal', 'percentage', or 'shares'.")
+            raise ValueError("Invalid split type. Use 'Equally', 'Custom', 'By Percentage', or 'By Shares'.")
 
         # Log the transaction
         self.transactions.append(transaction)
@@ -330,24 +330,33 @@ if __name__ == "__main__":
 
     # Add bills
     bill1 = Bill(payer="Alice", amount=300, participants=["Alice", "Bob", "Charlie"], category="Travel")
-    group.add_bill(bill1, split_type="equal")
+    group.add_bill(bill1, split_type="Equally")
 
     bill2 = Bill(payer="Bob", amount=150, participants=["Bob", "Charlie"], category="Food")
-    group.add_bill(bill2, split_type="equal")
+    group.add_bill(bill2, split_type="Equally")
 
-    # Get summary
-    summary = group.get_summary()
-    print("Group Summary:")
-    print(summary)
+    bill3 = Bill(payer="Bob", amount=450, participants=["Bob", "Charlie", "Alice"], category="Food")
+    group.add_bill(bill3, split_type="Equally")
 
-    # Remove a member
-    group.remove_member("Charlie")
+    dick = group.graph.edges
+    print(dict(dick))
 
-    # Get balances after removing Charlie
-    balances = group.get_balances()
-    print("\nBalances after removing Charlie:")
-    for member, balance in balances.items():
-        print(f"{member}: {balance:.2f}")
+    mcf = group.graph.minimize_cash_flow()
+    print(mcf)
 
-    # Delete the group
-    group.delete_group()
+    # # Get summary
+    # summary = group.get_summary()
+    # print("Group Summary:")
+    # print(summary)
+
+    # # Remove a member
+    # group.remove_member("Charlie")
+
+    # # Get balances after removing Charlie
+    # balances = group.get_balances()
+    # print("\nBalances after removing Charlie:")
+    # for member, balance in balances.items():
+    #     print(f"{member}: {balance:.2f}")
+
+    # # Delete the group
+    # group.delete_group()

@@ -6,6 +6,10 @@
     MemberInputsScreen:
     GroupScreen:
     AddExpenseScreen:
+    AddRecurringBillScreen:
+    MemberSummaryScreen:
+    SettleUpScreen:
+    SettlePaymentScreen:
 
 <LoginScreen>:
     name: "login"
@@ -175,6 +179,39 @@
             font_style: "H4"
             halign: "center"
 
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: dp(56)
+            spacing: 10
+
+            MDRaisedButton:
+                text: "Select Start Date"
+                on_release: root.open_date_picker("start")
+
+            MDRaisedButton:
+                text: "Select End Date"
+                on_release: root.open_date_picker("end")
+
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: None
+            height: dp(56)
+            spacing: 10
+
+            MDRaisedButton:
+                text: "Filter Timeline"
+                on_release: root.filter_transactions_by_timeline()
+
+            MDRaisedButton:
+                id: toggle_view_button
+                text: "Show Categorized"
+                on_release: root.toggle_transaction_view()
+
+            MDRaisedButton:
+                text: "Sort"
+                on_release: root.open_sort_menu()
+
         ScrollView:
             MDList:
                 id: transactions_history
@@ -194,8 +231,13 @@
                 on_release: app.root.current = "add_expense_screen"
 
             MDRaisedButton:
+                text: "Add Recurring Bill"
+                on_release: app.root.current = "add_recurring_bill_screen"  
+
+            MDRaisedButton:
                 text: "Settle Up"
                 on_release: app.root.current = "settle_up_screen"
+
 
 <TransactionHistoryWidget@BoxLayout>:
     orientation: "vertical"
@@ -228,6 +270,55 @@
         text: f"[b]Date:[/b] {root.date}"
         markup: True
         font_size: dp(12)
+
+<MemberSummaryScreen>:
+    name: "member_summary_screen"
+
+    BoxLayout:
+        orientation: "vertical"
+
+        # Main content: Scrollable list of members' balances and contributions
+        ScrollView:
+            BoxLayout:
+                id: member_list
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+
+        # Total Expenses label
+        MDLabel:
+            id: total_expenses_label
+            text: "Total Expenses: 0.00"
+            theme_text_color: "Primary"
+            size_hint_y: None
+            height: "40dp"
+
+        # Category Summary label
+        MDLabel:
+            id: category_summary_label
+            text: "Category Summary: "
+            theme_text_color: "Secondary"
+            size_hint_y: None
+            height: "40dp"
+
+        # Buttons at the bottom
+        BoxLayout:
+            size_hint_y: None
+            height: "50dp"
+            padding: "10dp"
+            spacing: "10dp"
+
+            MDRaisedButton:
+                text: "Back"
+                on_release: root.go_back()
+
+            MDRaisedButton:
+                text: "Add Expense"
+                on_release: root.add_expense()
+
+            MDRaisedButton:
+                text: "Settle Up"
+                on_release: root.settle_up()
 
 <AddExpenseScreen>:
     name: "add_expense_screen"
@@ -300,3 +391,112 @@
         MDList:
             id: participant_list
 
+<AddRecurringBillScreen>:
+    name: "add_recurring_bill_screen"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(20)
+        spacing: dp(10)
+
+        MDTextField:
+            id: payer_name
+            hint_text: "Payer Name"
+
+        MDTextField:
+            id: amount
+            hint_text: "Amount"
+            input_filter: "float"
+
+        MDTextField:
+            id: split_type
+            hint_text: "Split Type"
+            on_focus: root.open_split_type_menu(self)
+
+        MDRaisedButton:
+            text: "Select Participants"
+            on_release: root.open_participant_dialog()
+
+        MDLabel:
+            id: selected_participants_label
+            text: "Selected Participants: None"
+            halign: "center"
+
+        MDTextField:
+            id: frequency
+            hint_text: "Frequency"
+            on_focus: root.open_frequency_menu(self)
+
+        MDRaisedButton:
+            text: "Select Next Due Date"
+            on_release: root.open_date_picker()
+
+        MDLabel:
+            id: selected_date_label
+            text: "Next Due Date: Not Selected"
+            halign: "center"
+
+        MDTextField:
+            id: description
+            hint_text: "Description (Optional)"
+
+        MDRaisedButton:
+            text: "Submit"
+            on_release: root.add_recurring_bill()
+
+        MDRaisedButton:
+            text: "Back"
+            on_release: app.root.current = "group_screen"
+
+<SettleUpScreen>:
+    name: "settle_up_screen"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(20)
+        spacing: dp(10)
+
+        MDLabel:
+            text: "Settle-Up Transactions"
+            font_style: "H4"
+            halign: "center"
+
+        ScrollView:
+            MDList:
+                id: settle_up_list
+
+        MDRaisedButton:
+            text: "Back to Group"
+            on_release: app.root.current = "group_screen"
+
+<SettlePaymentScreen>:
+    name: "settle_payment_screen"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(20)
+        spacing: dp(10)
+
+        MDTextField:
+            id: payer_name
+            hint_text: "Payer Name"
+            text: app.payer
+
+        MDTextField:
+            id: payee_name
+            hint_text: "Payee Name"
+            text: app.payee
+
+        MDTextField:
+            id: amount
+            hint_text: "Amount"
+            text: str(app.amount)
+            input_filter: "float"
+
+        MDRaisedButton:
+            text: "Confirm Payment"
+            on_release: root.confirm_payment()
+
+        MDRaisedButton:
+            text: "Back"
+            on_release: app.root.current = "settle_up_screen"

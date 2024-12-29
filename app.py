@@ -307,18 +307,123 @@ class GroupScreen(Screen):
         # Categorize transactions
         categorized = {}
         for transaction_id, transaction in transactions.items():
-            if isinstance(transaction, dict):  # Ensure transaction is a dictionary
-                transaction_widget = TransactionHistoryWidget(
-                    payer=transaction.get("payer", "Unknown"),
-                    participants=", ".join(transaction.get("participants", [])),
-                    amount=str(transaction.get("amount", 0)),
-                    description=transaction.get("description", "No description"),
-                    date=transaction.get("date", "Unknown"),
-                )
-                transactions_history.add_widget(transaction_widget)
-            else:
-                toast(f"Invalid transaction format: {transaction_id}")
+            category = transaction.get("category", "Uncategorized")
+            if category not in categorized:
+                categorized[category] = []
+            categorized[category].append(transaction)
 
+        # Update UI
+        transactions_history = self.ids.transactions_history
+        transactions_history.clear_widgets()
+
+        for category, transactions in categorized.items():
+            # Add category header
+            transactions_history.add_widget(
+                MDLabel(
+                    text=f"[b]{category}[/b]",
+                    markup=True,
+                    font_style="H6",
+                    size_hint_y=None,
+                    height=dp(40),
+                )
+            )
+            # Add transactions under the category
+            for transaction in reversed(transactions):
+                transactions_history.add_widget(
+                    MDLabel(
+                        text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                        font_size=dp(14),
+                        size_hint_y=None,
+                        height=dp(30),
+                    )
+                )
+
+    def open_date_picker(self, target):
+        """Open date picker for start or end date."""
+        date_picker = MDDatePicker()
+        date_picker.bind(on_save=lambda instance, value, _: self.set_date(value, target))
+        date_picker.open()
+
+    def set_date(self, date, target):
+        """Set the selected start or end date."""
+        if target == "start":
+            self.start_date = date
+            toast(f"Start date set to {date}")
+        elif target == "end":
+            self.end_date = date
+            toast(f"End date set to {date}")
+
+    def filter_transactions_by_timeline(self):
+        """Filter transactions based on the selected timeline."""
+        if not hasattr(self, "start_date") or not hasattr(self, "end_date"):
+            toast("Please select both start and end dates.")
+            return
+
+        group_name = App.get_running_app().group_name
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transactions = transaction_ref.get() or {}
+
+        filtered = []
+        for transaction in transactions.values():
+            try:
+                transaction_date = datetime.strptime(transaction.get("date"), "%Y-%m-%d %H:%M:%S").date()
+                if self.start_date <= transaction_date <= self.end_date:
+                    filtered.append(transaction)
+            except ValueError as e:
+                toast(f"Invalid date format in transaction: {e}")
+                continue
+
+        # Display filtered transactions
+        transactions_history = self.ids.transactions_history
+        transactions_history.clear_widgets()
+        for transaction in filtered:
+            transactions_history.add_widget(
+                MDLabel(
+                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    font_size=dp(14),
+                    size_hint_y=None,
+                    height=dp(30),
+                )
+            )
+
+    def open_sort_menu(self):
+        """Open a menu for sorting transactions."""
+        menu_items = [
+            {"text": "By Date", "on_release": lambda x="date": self.sort_transactions(x)},
+            {"text": "By Amount", "on_release": lambda x="amount": self.sort_transactions(x)},
+        ]
+        self.sort_menu = MDDropdownMenu(caller=self.ids.toggle_view_button, items=menu_items, width_mult=4)
+        self.sort_menu.open()
+
+    def sort_transactions(self, criterion):
+        """Sort transactions by the selected criterion."""
+        group_name = App.get_running_app().group_name
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transactions = transaction_ref.get() or {}
+
+        # Sort transactions
+        if criterion == "date":
+            sorted_transactions = sorted(
+                transactions.values(),
+                key=lambda x: datetime.strptime(x.get("date"), "%Y-%m-%d %H:%M:%S"),
+            )
+        elif criterion == "amount":
+            sorted_transactions = sorted(transactions.values(), key=lambda x: float(x.get("amount", 0)))
+
+        # Update UI
+        transactions_history = self.ids.transactions_history
+        transactions_history.clear_widgets()
+        for transaction in reversed(sorted_transactions):
+            transactions_history.add_widget(
+                MDLabel(
+                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    font_size=dp(14),
+                    size_hint_y=None,
+                    height=dp(30),
+                )
+            )
+
+        self.sort_menu.dismiss()
 
     def members_summary(self):
         pass
@@ -337,9 +442,57 @@ class TransactionHistoryWidget(MDBoxLayout):
     description = StringProperty()
     date = StringProperty()
 
+
 class MemberSummaryScreen(Screen):
-    """the list of members with their net balances and a button to a screen to show the graph visualisation"""
-    pass 
+    def on_enter(self):
+        """Populate the screen with member data when the screen is entered."""
+        self.populate_member_summary()
+
+    def populate_member_summary(self):
+        """Get the group summary and display the member balances."""
+        # Get the group summary
+        group_name = App.get_running_app().group_name
+        group = db.reference(f"groups/{group_name}")
+        
+        summary = group.get_summary()
+        balances = group.get_balances()
+
+        # Clear existing content
+        self.ids.member_list.clear_widgets()
+
+        # Add each member's information
+        for member, balance in balances.items():
+            member_summary = f"{member}: Net Balance: {balance:.2f}"
+            contribution = summary["per_member_contributions"].get(member, 0)
+            member_summary += f", Contribution: {contribution:.2f}"
+
+            # Create a label for the member's data and add it to the list
+            self.ids.member_list.add_widget(
+                MDLabel(text=member_summary, theme_text_color="Secondary", size_hint_y=None, height="40dp")
+            )
+
+        # Display total expenses
+        total_expenses = summary["total_expenses"]
+        self.ids.total_expenses_label.text = f"Total Expenses: {total_expenses:.2f}"
+
+        # Optional: Add category breakdown
+        category_summary = summary["category_summary"]
+        self.ids.category_summary_label.text = "Category Summary: " + ", ".join(
+            [f"{category}: {amount:.2f}" for category, amount in category_summary.items()]
+        )
+        
+    def go_back(self):
+        """Navigate back to the GroupScreen."""
+        self.manager.current = "group_screen"
+
+    def add_expense(self):
+        """Navigate to AddExpenseScreen."""
+        self.manager.current = "add_expense_screen"
+
+    def settle_up(self):
+        """Navigate to SettleUpScreen."""
+        self.manager.current = "settle_up_screen"
+
 
 class AddExpenseScreen(Screen):
     def __init__(self, **kwargs):

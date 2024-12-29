@@ -238,6 +238,10 @@
                 text: "Settle Up"
                 on_release: app.root.current = "settle_up_screen"
 
+            MDRaisedButton:
+                text: "Back"
+                on_release: root.manager.current = "group_manager"
+
 
 <TransactionHistoryWidget@BoxLayout>:
     orientation: "vertical"

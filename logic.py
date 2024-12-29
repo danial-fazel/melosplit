@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 #         self.name = name
 
 class Group:
-    def __init__(self, name, members=set(), edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
+    def __init__(self, name, members={}, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
         self.name = name
         self.members = members  # Members in the group
         self.graph = Graph(edges, transactions, recurring_bills, category_totals)  # Separate debt graph for this group
@@ -18,7 +18,7 @@ class Group:
         """
         Clear all data associated with the group.
         """
-        self.members.clear()
+        self.members = {}
         self.graph = None  # Clear the group's graph
         print(f"Group '{self.name}' has been deleted.")
 
@@ -26,13 +26,13 @@ class Group:
         """
         Remove a member from the group and redistribute their balances.
         """
-        if member not in self.members:
-            raise ValueError(f"Member {member} is not in the group.")
+        if member not in list(self.members.keys()):
+            raise ValueError(f"Member {self.members[member]} is not in the group.")
 
         balances = self.graph.calculate_balances()
 
         # Reassign debts
-        remaining_members = self.members - {member}
+        remaining_members = [member_uid for member_uid , member_name in self.members.items() if member_uid != member]
         for payer, payees in self.graph.edges.items():
             if payer == member or member in payees:
                 amount = payees.pop(member, 0)
@@ -45,8 +45,8 @@ class Group:
                             self.graph.add_transaction(other_member, payer, split_amount)
 
         # Remove the member
-        self.members.remove(member)
-        print(f"Member '{member}' has been removed and debts redistributed.")
+        del self.members[member]
+        print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
 
     def get_summary(self):
         """
@@ -57,7 +57,7 @@ class Group:
         category_summary = self.graph.get_category_summary()
 
         total_expenses = sum(category_summary.values())
-        per_member_contributions = {member: -balances.get(member, 0) for member in self.members}
+        per_member_contributions = {member: -balances.get(member, 0) for member in list(self.members.values())}
 
         return {
             "total_expenses": total_expenses,
@@ -65,18 +65,18 @@ class Group:
             "category_summary": category_summary,
         }
     
-    def add_member(self, member):
+    def add_member(self, member_name, member_uid=None):
         """Add a member to the group."""
-        self.members.add(member)
+        self.members[member_uid or member_name] = member_name
 
     def add_bill(self, bill, split_type="Equally", custom_splits=None):
         """
         Add a bill to the group's graph.
         """
-        if bill.payer not in self.members:
+        if bill.payer not in list(self.members.values()):
             raise ValueError(f"Payer {bill.payer} is not a member of this group.")
         for participant in bill.participants:
-            if participant not in self.members:
+            if participant not in list(self.members.values()):
                 raise ValueError(f"Participant {participant} is not a member of this group.")
         self.graph.add_bill(bill, split_type, custom_splits)
 
@@ -151,8 +151,10 @@ class Graph:
             "amount": bill.amount,
             "participants": bill.participants,
             "category": bill.category,
-            "split_type": split_type,
-            "custom_splits": custom_splits
+            "split_type": split_type, 
+            "custom_splits": custom_splits,  
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Add transaction date
+            "description": "",
         }
 
         # Add the bill based on the split type
@@ -202,6 +204,7 @@ class Graph:
             self.category_totals[bill.category] += bill.amount
 
 
+
     def get_category_summary(self):
         """
         Generate a summary of expenses by category.
@@ -240,6 +243,7 @@ class Graph:
             if match:
                 filtered_transactions.append(transaction)
         return filtered_transactions
+    
     def calculate_balances(self):
         """
         Calculate net balances for all members.
@@ -324,7 +328,7 @@ if __name__ == "__main__":
     group = Group(name="Trip to Paris")
 
     # Add members
-    group.add_member("Alice")
+    group.add_member("Alice", 'wweed')
     group.add_member("Bob")
     group.add_member("Charlie")
 
@@ -338,11 +342,15 @@ if __name__ == "__main__":
     bill3 = Bill(payer="Bob", amount=450, participants=["Bob", "Charlie", "Alice"], category="Food")
     group.add_bill(bill3, split_type="Equally")
 
+    print(group.members)
+
+    # print(group.get_transaction_history())
+
     dick = group.graph.edges
-    print(dict(dick))
+    # print(dict(dick))
 
     mcf = group.graph.minimize_cash_flow()
-    print(mcf)
+    # print(mcf)
 
     # # Get summary
     # summary = group.get_summary()

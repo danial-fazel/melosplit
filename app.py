@@ -19,6 +19,8 @@ from kivy.metrics import dp
 from kivy.uix.screenmanager import Screen
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.pickers import MDDatePicker
+from collections import defaultdict
+
 
 # Firebase imports
 import firebase_admin
@@ -53,6 +55,30 @@ def local_data():
 def local_loggedin():
     """not logging in again in same device"""
     pass 
+
+the_group = None  # Global variable to store the active Group instance
+
+def save_group_to_firebase():
+    """Save the current the_group instance to Firebase."""
+    global the_group
+    if not the_group:
+        raise ValueError("The group is not initialized.")
+
+    # Convert the nested defaultdict to a standard dictionary for saving
+    edges_dict = {
+        payer: dict(payees)
+        for payer, payees in the_group.graph.edges.items()
+    }
+
+    # Save all group data back to Firebase
+    group_ref = db.reference(f"groups/{the_group.name}")
+    group_ref.update({
+        "members": the_group.members or {},
+        "edges": edges_dict or {},
+        # "transactions": the_group.graph.transactions or [],
+        "recurring_bills": the_group.graph.recurring_bills,
+        "category_totals": dict(the_group.graph.category_totals),
+    })
 
 
 class LoginScreen(MDScreen):
@@ -128,6 +154,8 @@ class GroupManagerScreen(Screen):
     def load_groups(self):
         """Load user groups dynamically into the group list."""
         user_uid = App.get_running_app().user_uid
+        # print(type(user_uid))
+        self.update_user_groups_in_firebase(user_uid)
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
         groups = user_groups_ref.get() or {}
 
@@ -142,10 +170,64 @@ class GroupManagerScreen(Screen):
                 )
             )
 
+    def update_user_groups_in_firebase(self, member_uid):
+        """
+        Find all groups that a specific member belongs to and update them
+        in the Firebase path users/{member_uid}/groups.
+        """
+        groups_ref = db.reference("/groups")
+        groups = groups_ref.get()  # Fetch all groups
+
+        if not groups:
+            return
+
+        user_groups_path = f"/users/{member_uid}/groups"
+        user_groups_ref = db.reference(user_groups_path)
+
+        # Prepare a dictionary to update the user's groups
+        user_groups = {}
+
+        # Loop through all groups
+        for group_name, group_data in groups.items():  # Use the key as the group name
+            members = group_data.get("members", {})
+            if member_uid in members:
+                user_groups[group_name] = group_name  # Use the group key itself as the name
+
+        # Update the user's group list in Firebase
+        user_groups_ref.set(user_groups)
+
 
     def go_to_group_screen(self, group_name):
-        """Navigate to the selected group's screen."""
-        App.get_running_app().group_name = group_name
+        """Navigate to the selected group's screen and initialize the_group."""
+        global the_group
+
+        # Fetch group data from Firebase
+        group_data_ref = db.reference(f"groups/{group_name}")
+        group_data = group_data_ref.get()
+
+        if not group_data:
+            toast(f"Group {group_name} not found!")
+            return
+
+        # Load edges (nested dictionary) from Firebase or use an empty structure if absent
+        edges = group_data.get("edges", {})
+        edges = defaultdict(lambda: defaultdict(float), {
+            payer: defaultdict(float, payees)
+            for payer, payees in edges.items()
+        })
+
+        # Initialize the global Group instance
+        the_group = Group(
+            name=group_name,
+            members= group_data.get("members", {}),
+            edges=edges,
+            # transactions=list(group_data.get("transactions", {}).values()),
+            recurring_bills=group_data.get("recurring_bills", []),
+            category_totals=defaultdict(float, group_data.get("category_totals", {})),
+        )
+
+        App.get_running_app().group_name = group_name 
+        # print(dict(the_group.graph.edges))
         self.manager.current = "group_screen"
 
 
@@ -158,7 +240,7 @@ class AddGroupScreen(Screen):
         if not group_name:
             toast("Please enter a group name.")
             return
-        if not num_members.isdigit() or int(num_members) <= 0:
+        if not num_members.isdigit() or int(num_members) <= 1:
             toast("Please enter a valid number of members.")
             return
 
@@ -166,6 +248,9 @@ class AddGroupScreen(Screen):
         self.manager.get_screen("member_inputs_screen").setup_inputs(
             group_name, int(num_members)
         )
+
+        global the_group
+        the_group = Group(group_name)
         self.manager.current = "member_inputs_screen"
 
 
@@ -217,6 +302,10 @@ class MemberInputsScreen(Screen):
             toast("A group must have 2 members at least.")  ##
             return
 
+        global the_group
+        for member in members:
+            the_group.add_member(member["name"])
+
         # Save the group to Firebase
         user_uid = App.get_running_app().user_uid
         group_ref = db.reference(f"groups/{group_name}")
@@ -246,12 +335,12 @@ class MemberInputsScreen(Screen):
         #                 member_groups_ref = db.reference(f"users/{member}/groups")
         #                 member_groups_ref.update({group_name: 0})
 
-        # Initialize the group graph
-        the_group = Group(group_name, members_data)  ##
-        for member in members:
-            member_id = member["uid"] or member["name"]  # Use UID if available, otherwise use the name
-            if member_id:
-                the_group.graph.add_transaction(member_id, user_uid, 0)
+        # # Initialize the group graph
+        # the_group = Group(group_name, members_data)  ##
+        # for member in members:
+        #     member_id = member["uid"] or member["name"]  # Use UID if available, otherwise use the name
+        #     if member_id:
+        #         the_group.graph.add_transaction(member_id, user_uid, 0)  ## This stuff commented.
 
         toast(f"Group '{group_name}' created.")
         self.manager.current = "group_manager"
@@ -451,11 +540,12 @@ class MemberSummaryScreen(Screen):
     def populate_member_summary(self):
         """Get the group summary and display the member balances."""
         # Get the group summary
-        group_name = App.get_running_app().group_name
-        group = db.reference(f"groups/{group_name}")
-        
-        summary = group.get_summary()
-        balances = group.get_balances()
+        # group_name = App.get_running_app().group_name
+        # group = db.reference(f"groups/{group_name}")
+
+        global the_group
+        summary = the_group.get_summary()
+        balances = the_group.get_balances()
 
         # Clear existing content
         self.ids.member_list.clear_widgets()
@@ -609,8 +699,9 @@ class AddExpenseScreen(Screen):
 
 
         # Initialize or load the group graph
+        global the_group
         group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)
+        group_graph = the_group.graph
 
         # Add the bill to the graph
         group_graph.add_bill(
@@ -623,6 +714,11 @@ class AddExpenseScreen(Screen):
             split_type=split_type,
             custom_splits=custom_splits,
         )
+        print(f"\nA:\n{dict(group_graph.edges)}")
+        print(f"\n\nB:\n{dict(group_graph.category_totals)}\n")
+        print(the_group.members)
+
+        save_group_to_firebase()
 
         # Save transaction to Firebase
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
@@ -642,11 +738,11 @@ class AddExpenseScreen(Screen):
         toast("Expense added successfully.")
         self.manager.current = "group_screen"
 
-    def get_group_graph(self, group_name):
-        """Retrieve or initialize the graph for a specific group."""
-        group_ref = db.reference(f"groups/{group_name}/graph")
-        group_graph = Graph()
-        return group_graph
+    # def get_group_graph(self, group_name):
+    #     """Retrieve or initialize the graph for a specific group."""
+    #     group_ref = db.reference(f"groups/{group_name}/graph")
+    #     group_graph = Graph()
+    #     return group_graph
 
     def clear_inputs(self):
         """Clear all input fields."""

@@ -33,16 +33,33 @@
 
 
 
-# Firebase imports
-import firebase_admin
-from firebase_admin import credentials, db
+# # Firebase imports
+# import firebase_admin
+# from firebase_admin import credentials, db
 
-# Initialize Firebase
-cred = credentials.Certificate("melosplit-firebase.json")
-firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
-})
-member_ref = db.reference(f"/users/xxzrqywg")
-member_data = member_ref.get()
-member_groups = member_data.get("groups")
-print(member_groups)
+# # Initialize Firebase
+# cred = credentials.Certificate("melosplit-firebase.json")
+# firebase_admin.initialize_app(cred, {
+#     "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
+# })
+# member_ref = db.reference(f"/users/xxzrqywg")
+# member_data = member_ref.get()
+# member_groups = member_data.get("groups")
+# print(member_groups)
+
+from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+import matplotlib.pyplot as plt
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+
+class TestApp(App):
+    def build(self):
+        layout = BoxLayout()
+        fig, ax = plt.subplots()
+        ax.plot([0, 1, 2], [0, 1, 4])
+        canvas = FigureCanvasKivyAgg(fig)
+        layout.add_widget(canvas)
+        return layout
+
+if __name__ == "__main__":
+    TestApp().run()

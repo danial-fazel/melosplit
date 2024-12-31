@@ -20,6 +20,7 @@ from kivy.uix.screenmanager import Screen
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.pickers import MDDatePicker
 from collections import defaultdict
+import networkx as nx
 
 
 # Firebase imports
@@ -79,7 +80,7 @@ def save_group_to_firebase():
         "description": the_group.get_category(),
         "edges": edges_dict or {},
         # "transactions": the_group.graph.transactions or [],
-        "recurring_bills": the_group.graph.recurring_bills,
+        "recurring_bills": dict(the_group.graph.recurring_bills),
         "category_totals": dict(the_group.graph.category_totals),
     })
 
@@ -553,6 +554,8 @@ class MemberSummaryScreen(Screen):
         summary = the_group.get_summary()
         balances = the_group.get_balances()
 
+        # print(the_group.graph.visualize_graph())
+
         # Clear existing content
         self.ids.member_list.clear_widgets()
 
@@ -576,6 +579,9 @@ class MemberSummaryScreen(Screen):
         self.ids.category_summary_label.text = "Category Summary: " + ", ".join(
             [f"{category}: {amount:.2f}" for category, amount in category_summary.items()]
         )
+
+        print(dict(the_group.graph.edges)) # Just checking the graph
+
         
     def go_back(self):
         """Navigate back to the GroupScreen."""
@@ -792,13 +798,13 @@ class ParticipantDialog:
         list_view = MDList()
 
         # Add participant inputs or checkboxes
-        for name in participants:
+        for uid, name in participants.items():
             item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
 
             if split_type == "Equally":
                 # For "Equally", use checkboxes only
                 checkbox = MDCheckbox(size_hint_x=0.1)
-                checkbox.bind(active=lambda _, active, name=name: self.toggle_selection(active, name))
+                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
                 item.add_widget(checkbox)
             else:
                 # For other split types, use input fields only
@@ -809,7 +815,7 @@ class ParticipantDialog:
                     pos_hint={"center_y": 0.5},  # Adjust alignment
                 )
                 item.add_widget(input_field)
-                self.selected_participants[name] = {"selected": True, "value": input_field}
+                self.selected_participants[uid] = {"selected": True, "value": input_field}
 
             label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
             item.add_widget(label)
@@ -1122,6 +1128,26 @@ class SettlePaymentScreen(Screen):
         toast("Payment recorded successfully.")
         self.manager.current = "settle_up_screen"
 
+# from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+# import matplotlib.pyplot as plt
+
+class GraphVisualizationScreen(Screen):
+    def on_enter(self):
+        """Render the graph when the screen is displayed."""
+        global the_group  # Access the global group data
+        group_graph = the_group.graph  # Get the group's graph
+        group_graph.visualize_graph()
+
+        # # Generate the NetworkX graph and plot it
+        # nx_graph = group_graph.generate_networkx_graph()
+        # fig, ax = plt.subplots()
+        # pos = nx.spring_layout(nx_graph)
+        # nx.draw(nx_graph, pos, with_labels=True, ax=ax)
+
+        # # Embed the graph into Kivy
+        # canvas = FigureCanvasKivyAgg(fig)
+        # self.ids.graph_container.clear_widgets()  # Ensure the container is empty
+        # self.ids.graph_container.add_widget(canvas)
 
     
 

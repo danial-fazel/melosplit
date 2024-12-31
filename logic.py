@@ -65,6 +65,11 @@ class Group:
             "category_summary": category_summary,
         }
     
+    def get_category(self,category=None):###
+         self.category = category
+    def discript(self,discription=None):
+        self.description = discription
+
     def add_member(self, member_name, member_uid=None):
         """Add a member to the group."""
         self.members[member_uid or member_name] = member_name
@@ -265,12 +270,38 @@ class Graph:
         balance = self.calculate_balances()
         net_balances = [(person, bal) for person, bal in balance.items() if bal != 0]
 
+        def adjust_to_zero(net_balances, favor="creditor"):
+            """
+            Adjust balances to ensure total sums to zero.
+            :param favor: 'creditor' (default) favors reducing creditor balances;
+                        'debtor' favors increasing debtor balances.
+            """
+            total = sum(balance for _, balance in net_balances)
+            if abs(total) > 0.01:  # If there is a rounding error
+                if favor == "creditor":
+                    # Adjust the largest positive balance
+                    max_person, max_balance = max(net_balances, key=lambda x: x[1])
+                    adjusted_balances = [
+                        (person, balance if person != max_person else balance - total)
+                        for person, balance in net_balances
+                    ]
+                elif favor == "debtor":
+                    # Adjust the largest negative balance
+                    min_person, min_balance = min(net_balances, key=lambda x: x[1])
+                    adjusted_balances = [
+                        (person, balance if person != min_person else balance - total)
+                        for person, balance in net_balances
+                    ]
+                return adjusted_balances
+            return net_balances
+
         # Step 2: Simplify using the algorithm
         def settle_debts(net_balances):
             if not net_balances:
                 return []
 
             # Sort balances and find most positive and most negative
+            net_balances = adjust_to_zero(net_balances)
             net_balances.sort(key=lambda x: x[1])
             min_person, min_amount = net_balances[0]  # Most negative
             max_person, max_amount = net_balances[-1]  # Most positive
@@ -286,7 +317,7 @@ class Graph:
             net_balances[-1] = (max_person, max_amount - settle_amount)
 
             # Remove zero balances
-            net_balances = [entry for entry in net_balances if entry[1] != 0]
+            net_balances = [entry for entry in net_balances if abs(entry[1]) > 0.01]
 
             # Recur with the updated balances
             return [transaction] + settle_debts(net_balances)
@@ -350,7 +381,7 @@ if __name__ == "__main__":
     # print(dict(dick))
 
     mcf = group.graph.minimize_cash_flow()
-    # print(mcf)
+    print(mcf)
 
     # # Get summary
     # summary = group.get_summary()

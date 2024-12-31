@@ -34,6 +34,7 @@ firebase_admin.initialize_app(cred, {
 
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')
+    email = re.sub(r'[.#$/\[\]]', '_', email) # remove special characters
     uid = email[:at_sign] ##
     ref = db.reference("/users/")
     ref.child(email).set({"{uid}": name})
@@ -74,6 +75,8 @@ def save_group_to_firebase():
     group_ref = db.reference(f"groups/{the_group.name}")
     group_ref.update({
         "members": the_group.members or {},
+        "category": "",
+        "description": the_group.get_category(),
         "edges": edges_dict or {},
         # "transactions": the_group.graph.transactions or [],
         "recurring_bills": the_group.graph.recurring_bills,
@@ -87,8 +90,8 @@ class LoginScreen(MDScreen):
         password = self.ids.password_input.text.strip()
         
         # Convert email to a safe key
-        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
         at_sign = email.find('@') ##
+        safe_email = re.sub(r'[.#$/\[\]]', '_', email) # Replace special characters with underscore
         safe_email = email[:at_sign]
 
         if not email or not password:
@@ -117,9 +120,9 @@ class SignupScreen(MDScreen):
         password = self.ids.password_input.text.strip()
 
         # # Convert email to a safe key
-        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
         at_sign = email.find('@') ##
         safe_email = email[:at_sign]
+        safe_email = re.sub(r'[.#$/\[\]]', '_', email)
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -222,7 +225,7 @@ class GroupManagerScreen(Screen):
             members= group_data.get("members", {}),
             edges=edges,
             # transactions=list(group_data.get("transactions", {}).values()),
-            recurring_bills=group_data.get("recurring_bills", []),
+            recurring_bills=list(group_data.get("recurring_bills", [])),
             category_totals=defaultdict(float, group_data.get("category_totals", {})),
         )
 
@@ -236,6 +239,7 @@ class AddGroupScreen(Screen):
         """Validate group name and number of members, then navigate to member input screen."""
         group_name = self.ids.group_name_input.text.strip()
         num_members = self.ids.num_members_input.text.strip()
+        description = self.ids.description_input.text.strip()
 
         if not group_name:
             toast("Please enter a group name.")
@@ -251,6 +255,7 @@ class AddGroupScreen(Screen):
 
         global the_group
         the_group = Group(group_name)
+        the_group.discript(description)
         self.manager.current = "member_inputs_screen"
 
 
@@ -287,6 +292,7 @@ class MemberInputsScreen(Screen):
             if name:
                 if email:
                     # Validate email and fetch UID
+                    email = re.sub(r'[.#$/\[\]]', '_', email)###
                     member_uid = email.split('@')[0] ##
                     # user_ref = db.reference(f"/users/{member_uid}")
                     # user_data = user_ref.get()
@@ -714,9 +720,9 @@ class AddExpenseScreen(Screen):
             split_type=split_type,
             custom_splits=custom_splits,
         )
-        print(f"\nA:\n{dict(group_graph.edges)}")
-        print(f"\n\nB:\n{dict(group_graph.category_totals)}\n")
-        print(the_group.members)
+        # print(f"\nA:\n{dict(group_graph.edges)}")
+        # print(f"\n\nB:\n{dict(group_graph.category_totals)}\n")
+        # print(the_group.members)
 
         save_group_to_firebase()
 
@@ -956,11 +962,24 @@ class AddRecurringBillScreen(Screen):
         except ValueError:
             toast("Invalid amount!")
             return
+        
+        custom_splits = self.selected_participants
 
+        if split_type == "By Shares" and sum(custom_splits.values()) <= 0:
+            self.ids.error_label.text = "Total shares must be greater than zero!"
+            return
+        if split_type == "By Percentage" and abs(sum(custom_splits.values()) - 100) > 0.01:
+            self.ids.error_label.text = "Total percentage must equal 100!"
+            return
+        if split_type == "Custom" and abs(sum(custom_splits.values()) - amount) > 0.01:
+            self.ids.error_label.text = "Custom amounts must sum to the total amount!"
+            return
+        
         # Initialize or load the group graph
+        global the_group
         group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)
-
+        group_graph = the_group.graph
+        
         # Add the recurring bill
         group_graph.add_recurring_bill(
             Bill(
@@ -972,6 +991,18 @@ class AddRecurringBillScreen(Screen):
                 next_due_date=str(self.next_due_date),
             )
         )
+
+        group_graph.add_bill(
+            Bill(
+                payer=payer,
+                amount=amount,
+                participants=list(self.selected_participants),
+                category="",
+            ),
+            split_type=split_type,
+            custom_splits=custom_splits,
+        )
+        save_group_to_firebase()
 
         # Save the recurring bill to Firebase
         recurring_bills_ref = db.reference(f"groups/{group_name}/recurring_bills")
@@ -985,21 +1016,27 @@ class AddRecurringBillScreen(Screen):
             "description": description,
         })
 
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transaction_ref.push({
+            "payer": payer,
+            "participants": self.selected_participants,
+            "amount": amount,
+            "description": description,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
         toast("Recurring bill added successfully.")
         self.manager.current = "group_screen"
 
-    def get_group_graph(self, group_name):
-        """Retrieve or initialize the graph for a specific group."""
-        group_ref = db.reference(f"groups/{group_name}/graph")
-        group_graph = Graph()
-        return group_graph
 
+
+from functools import partial
 
 class SettleUpScreen(Screen):
     def on_enter(self):
         """Generate and display the settle-up transactions when the screen is opened."""
-        group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)  # Always fetch the latest graph data
+        global the_group
+        group_graph = the_group.graph  # Always fetch the latest graph data
 
         # Get simplified transactions
         simplified_transactions = group_graph.minimize_cash_flow()
@@ -1028,34 +1065,14 @@ class SettleUpScreen(Screen):
                         size_hint_x=0.7,
                     )
                 )
-                item.add_widget(
-                    MDRaisedButton(
-                        text="Settle Payment",
-                        size_hint_x=0.3,
-                        on_release=lambda p=payer, py=payee, a=amount: self.settle_payment(p, py, a),
-                    )
+                # Use functools.partial to bind arguments correctly
+                settle_button = MDRaisedButton(
+                    text="Settle Payment",
+                    size_hint_x=0.3,
+                    on_release=lambda p=payer, py=payee, a=amount: self.settle_payment(p, py, a),
                 )
+                item.add_widget(settle_button)
                 settle_up_list.add_widget(item)
-
-    def get_group_graph(self, group_name):
-        """Build and return the graph dynamically from the transaction history in Firebase."""
-        transaction_ref = db.reference(f"groups/{group_name}/transactions")
-        transactions = transaction_ref.get() or {}
-
-        graph = Graph()
-
-        # Recreate the graph using transaction history
-        for transaction in transactions.values():
-            payer = transaction.get("payer")
-            amount = transaction.get("amount", 0)
-            participants = transaction.get("participants", [])
-
-            # Add each participant's share of the transaction to the graph
-            for participant in participants:
-                if payer and participant and participant != payer:
-                    graph.add_transaction(payer, participant, amount / len(participants))
-
-        return graph
 
     def settle_payment(self, payer, payee, amount):
         """Navigate to the settle payment screen with transaction details."""
@@ -1066,12 +1083,16 @@ class SettleUpScreen(Screen):
         app.root.current = "settle_payment_screen"
 
 
+
 class SettlePaymentScreen(Screen):
     def confirm_payment(self):
         """Record the payment in the group graph and Firebase."""
         payer = self.ids.payer_name.text.strip()
         payee = self.ids.payee_name.text.strip()
         amount = self.ids.amount.text.strip()
+
+        global the_group
+        group_graph = the_group.graph 
 
         if not payer or not payee or not amount:
             toast("All fields are required!")
@@ -1085,8 +1106,8 @@ class SettlePaymentScreen(Screen):
 
         # Update group graph
         group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)
         group_graph.add_transaction(payer, payee, -amount)  # Negative amount to indicate payment
+        save_group_to_firebase()
 
         # Record the payment in Firebase
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
@@ -1101,11 +1122,6 @@ class SettlePaymentScreen(Screen):
         toast("Payment recorded successfully.")
         self.manager.current = "settle_up_screen"
 
-    def get_group_graph(self, group_name):
-        """Retrieve or initialize the graph for a specific group."""
-        group_ref = db.reference(f"groups/{group_name}/graph")
-        group_graph = Graph()
-        return group_graph
 
     
 

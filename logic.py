@@ -94,7 +94,7 @@ class Group:
         return self.graph.get_transaction_history(filter_by)
 
 class Bill:
-    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None):
+    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None,description=None, split_type=None):
         self.payer = payer
         self.amount = amount
         self.participants = participants  # List of participant names
@@ -103,22 +103,24 @@ class Bill:
             datetime.strptime(next_due_date, "%Y-%m-%d") if next_due_date else None
         )
         self.category = category  # Category of the expense (e.g., 'Food', 'Travel')
+        self.description = description
+        self.split_type = split_type
 
 
     def update_next_due_date(self):
         """Update the next due date based on the frequency."""
         if not self.frequency:
+            print('One-time bill, no update needed')
             return  # One-time bill, no update needed
+        #
+        if self.frequency == "Monthly":
+            self.next_due_date += timedelta(days=30)
+        elif self.frequency == "Weekly":
+            self.next_due_date += timedelta(days=7)
+        elif self.frequency == "Yearly":
+            self.next_due_date += timedelta(days=365)
 
-        if self.frequency == "weekly":
-            self.next_due_date += timedelta(weeks=1)
-        elif self.frequency == "monthly":
-            self.next_due_date = self.next_due_date.replace(
-                month=self.next_due_date.month % 12 + 1
-            )
-        elif self.frequency == "yearly":
-            self.next_due_date = self.next_due_date.replace(year=self.next_due_date.year + 1)
-
+        print(self.next_due_date)
 
 class Graph:
     def __init__(self, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
@@ -135,7 +137,7 @@ class Graph:
             raise ValueError("Recurring bills must have a frequency and next_due_date.")
         self.recurring_bills.append(bill)
 
-    def process_recurring_bills(self, current_date):
+    def process_recurring_bills(self, current_date, notify_user_callback):###
         """
         Check and process all recurring bills due by the given date.
         """
@@ -143,7 +145,7 @@ class Graph:
         for bill in self.recurring_bills:
             if bill.next_due_date and bill.next_due_date <= current_date:
                 # Add the bill to the graph as a one-time bill
-                self.add_bill(Bill(bill.payer, bill.amount, bill.participants))
+                notify_user_callback(bill)###
                 # Update the next due date
                 bill.update_next_due_date()
 

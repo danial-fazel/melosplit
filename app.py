@@ -35,8 +35,8 @@ firebase_admin.initialize_app(cred, {
 
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')
-    email = re.sub(r'[.#$/\[\]]', '_', email) # remove special characters
-    uid = email[:at_sign] ##
+    email = email[:at_sign]
+    uid = re.sub(r'[.#$/\[\]]', '_', email) # remove special characters
     ref = db.reference("/users/")
     ref.child(email).set({"{uid}": name})
 
@@ -92,8 +92,8 @@ class LoginScreen(MDScreen):
         
         # Convert email to a safe key
         at_sign = email.find('@') ##
-        safe_email = re.sub(r'[.#$/\[\]]', '_', email) # Replace special characters with underscore
         safe_email = email[:at_sign]
+        safe_email = re.sub(r'[.#$/\[\]]', '_', safe_email) # Replace special characters with underscore
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -122,7 +122,7 @@ class SignupScreen(MDScreen):
 
         # # Convert email to a safe key
         at_sign = email.find('@') ##
-        safe_email = email[:at_sign]
+        email = email[:at_sign]
         safe_email = re.sub(r'[.#$/\[\]]', '_', email)
 
         if not email or not password:
@@ -1184,7 +1184,6 @@ class AddRecurringBillScreen(Screen):
             split_type=split_type,
             custom_splits=custom_splits,
         )
-        save_group_to_firebase()
 
         # Save the recurring bill to Firebase
         recurring_bills_ref = db.reference(f"groups/{group_name}/recurring_bills")
@@ -1209,6 +1208,17 @@ class AddRecurringBillScreen(Screen):
 
         toast("Recurring bill added successfully.")
         self.manager.current = "group_screen"
+
+    def prefill_form(self, group_name, bill):
+        """Pre-fill the form with recurring bill details."""
+        self.ids.payer_name.text = ", ".join(bill.payer if isinstance(bill.payer, list) else [bill.payer])
+        self.ids.amount.text = str(bill.amount)
+        self.ids.split_type.text = bill.split_type
+        self.ids.frequency.text = bill.frequency
+        self.ids.selected_date_label.text = f"Next Due Date: {bill.next_due_date.strftime('%Y-%m-%d')}"
+        self.group_name = group_name  # Track the group name for saving changes
+        App.get_running_app().group_name = self.group_name
+        self.selected_participants = {p: 0 for p in bill.participants}
 
 
 
@@ -1289,7 +1299,7 @@ class SettlePaymentScreen(Screen):
         # Update group graph
         group_name = App.get_running_app().group_name
         group_graph.add_transaction(payer, payee, -amount)  # Negative amount to indicate payment
-        save_group_to_firebase()
+
 
         # Record the payment in Firebase
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
@@ -1325,10 +1335,210 @@ class GraphVisualizationScreen(Screen):
         # self.ids.graph_container.clear_widgets()  # Ensure the container is empty
         # self.ids.graph_container.add_widget(canvas)
 
-    
 
-class UserProfileScreen():
+class UserProfileScreen(Screen):
     """calculating and showing the user net balance in all their groups,the ability to change password and log out"""
+    def on_enter(self):
+        """Update the user's net balance and check for notifications when entering the screen."""
+        self.update_net_balance()
+
+    def update_net_balance(self):
+        """Calculate and display the user's net balance across all groups."""
+        user_uid = App.get_running_app().user_uid
+        total_balance = 0.0
+
+        # Fetch all groups the user belongs to
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+        groups = user_groups_ref.get() or {}
+
+        for group_name in groups:
+            # Fetch group data
+            group_ref = db.reference(f"groups/{group_name}")
+            group_data = group_ref.get()
+            if not group_data:
+                continue
+
+            # Calculate user balance in the group
+            edges = defaultdict(lambda: defaultdict(float), group_data.get("edges", {}))
+            graph = Graph(edges)
+            group_balances = graph.calculate_balances()
+            total_balance += group_balances.get(user_uid, 0.0)
+
+        # Update the label in the UI
+        self.ids.net_balance_label.text = f"Your Net Balance in overal: {total_balance:.2f} USD"
+
+
+class NotificationScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.notifications = []  # List to store active notifications
+
+    def on_enter(self):
+        """Refresh the notification list when entering the screen."""
+        self.refresh_notifications()
+
+    def refresh_notifications(self):
+        """Fetch due recurring bills and update notifications."""
+        self.notifications.clear()
+        self.clear_notification_widgets()
+        
+        user_uid = App.get_running_app().user_uid
+        current_date = datetime.now()
+
+        # Fetch groups the user belongs to
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+        groups = user_groups_ref.get() or {}
+
+        for group_name in groups:
+            group_ref = db.reference(f"groups/{group_name}/recurring_bills")
+            recurring_bills_data = group_ref.get()
+
+            if not recurring_bills_data:
+                continue
+
+            # Handle both dictionary and list structures for recurring bills
+            if isinstance(recurring_bills_data, dict):
+                for bill_id, bill_data in recurring_bills_data.items():
+                    self.add_due_bill(group_name, bill_id, bill_data, current_date)
+            elif isinstance(recurring_bills_data, list):
+                for bill_id in recurring_bills_data:
+                    bill_data = db.reference(f"groups/{group_name}/recurring_bills/{bill_id}").get()
+                    if bill_data:
+                        self.add_due_bill(group_name, bill_id, bill_data, current_date)
+
+        # Refresh the UI with notifications
+        self.show_notifications()
+
+    def add_due_bill(self, group_name, bill_id, bill_data, current_date):
+        """Add a bill to the notification list if it's due."""
+        try:
+            # Ensure `next_due_date` is a valid string
+            next_due_date = bill_data.get("next_due_date")
+            if isinstance(next_due_date, datetime):
+                next_due_date = next_due_date.strftime("%Y-%m-%d")
+            elif not isinstance(next_due_date, str):
+                return  # Skip invalid dates
+
+            # Parse `next_due_date` and check if it's due
+            next_due_date = datetime.strptime(next_due_date, "%Y-%m-%d")
+            if next_due_date > current_date:
+                return  # Skip bills that are not due
+
+            self.notifications.append({
+                "group_name": group_name,
+                "bill_id": bill_id,
+                "bill_data": bill_data,
+            })
+        except Exception as e:
+            print(f"Error adding due bill: {e}")
+
+    def show_notifications(self):
+        """Display notifications on the screen."""
+        self.clear_notification_widgets()
+
+        for notification in self.notifications:
+            bill_data = notification["bill_data"]
+            group_name = notification["group_name"]
+            bill_id = notification["bill_id"]
+
+            category = bill_data.get("category", "Uncategorized")
+            amount = bill_data.get("amount", 0.0)
+            next_due_date = bill_data.get("next_due_date", "Unknown Date")
+            message = f"{category}: {amount} USD - Due {next_due_date} in {group_name}"
+
+            def confirm_callback(instance, notif=notification):
+                self.confirm_notification(notif)
+
+            def dismiss_callback(instance, notif=notification):
+                self.dismiss_notification(notif)
+
+            def edit_callback(instance, notif=notification):
+                self.edit_recurring_bill(
+                    notif["group_name"], notif["bill_data"], notif["bill_id"]
+                )
+
+            # Add the notification widget with the Edit option
+            self.add_notification_widget(message, confirm_callback, dismiss_callback, edit_callback)
+
+
+    def confirm_notification(self, notification):
+        """Handle confirmation of a notification."""
+        group_name = notification["group_name"]
+        bill_id = notification["bill_id"]
+        bill_data = notification["bill_data"]
+
+        try:
+            # Update the next due date
+            bill = Bill(
+                payer=bill_data["payer"],
+                amount=bill_data["amount"],
+                participants=bill_data["participants"],
+                frequency=bill_data["frequency"],
+                next_due_date=bill_data.get("next_due_date"),
+                category=bill_data.get("category", "Uncategorized"),
+                split_type=bill_data.get("split_type", "Equally"),
+                description=bill_data.get("description", ""),
+            )
+            bill.update_next_due_date()
+            db.reference(f"groups/{group_name}/recurring_bills/{bill_id}").update({
+                "next_due_date": bill.next_due_date.strftime("%Y-%m-%d")
+            })
+        except Exception as e:
+            print(f"Error confirming notification: {e}")
+
+        # Remove the notification from the list and refresh UI
+        self.notifications.remove(notification)
+        self.show_notifications()
+
+    def dismiss_notification(self, notification):
+        """Remove the notification from the list without making changes."""
+        self.notifications.remove(notification)
+        self.show_notifications()
+
+    def add_notification_widget(self, message, confirm_callback, dismiss_callback, edit_callback):
+        """Add a notification widget to the UI."""
+        layout = self.ids.notification_list
+        notification_item = NotificationItem()
+        notification_item.ids.message_label.text = message
+        notification_item.ids.confirm_button.bind(on_release=confirm_callback)
+        notification_item.ids.dismiss_button.bind(on_release=dismiss_callback)
+        notification_item.ids.edit_button.bind(on_release=edit_callback)
+        layout.add_widget(notification_item)
+
+
+    def clear_notification_widgets(self):
+        """Clear all notification widgets from the UI."""
+        self.ids.notification_list.clear_widgets()
+    
+    def edit_recurring_bill(self, group_name, bill_data, bill_id):
+        """Pre-fill the Add Recurring Bill screen with the selected bill."""
+        bill = Bill(**bill_data)
+        global the_group
+
+        # Fetch the group data
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
+        # Extract recurring bills
+        recurring_bills = group_data.get("recurring_bills", {})
+
+        # Initialize `the_group` with the correct group data
+        the_group = Group(
+            name=group_name,
+            members=group_data.get("members", {}),
+            edges=defaultdict(lambda: defaultdict(float), group_data.get("edges", {})),
+            recurring_bills=list(recurring_bills.values()),  # Convert to list if needed
+            category_totals=defaultdict(float, group_data.get("category_totals", {})),
+        )
+
+        # Pre-fill the form with the bill's data
+        add_bill_screen = self.manager.get_screen("add_recurring_bill_screen")
+        add_bill_screen.prefill_form(group_name, bill)
+        
+        # Navigate to the "Add Recurring Bill" screen
+        self.manager.current = "add_recurring_bill_screen"
+
+class NotificationItem(MDBoxLayout):
     pass
 
 class ParticipantListItem(OneLineAvatarIconListItem):

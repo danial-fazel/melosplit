@@ -46,7 +46,7 @@ class Group:
 
         # Remove the member
         del self.members[member]
-        print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
+        # print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
 
     def get_summary(self):
         """
@@ -65,6 +65,11 @@ class Group:
             "category_summary": category_summary,
         }
     
+    def get_category(self,category=None):###
+         self.category = category
+    def discript(self,discription=None):
+        self.description = discription
+
     def add_member(self, member_name, member_uid=None):
         """Add a member to the group."""
         self.members[member_uid or member_name] = member_name
@@ -89,7 +94,7 @@ class Group:
         return self.graph.get_transaction_history(filter_by)
 
 class Bill:
-    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None):
+    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None,description=None, split_type=None):
         self.payer = payer
         self.amount = amount
         self.participants = participants  # List of participant names
@@ -98,22 +103,24 @@ class Bill:
             datetime.strptime(next_due_date, "%Y-%m-%d") if next_due_date else None
         )
         self.category = category  # Category of the expense (e.g., 'Food', 'Travel')
+        self.description = description
+        self.split_type = split_type
 
 
     def update_next_due_date(self):
         """Update the next due date based on the frequency."""
         if not self.frequency:
+            print('One-time bill, no update needed')
             return  # One-time bill, no update needed
+        #
+        if self.frequency == "Monthly":
+            self.next_due_date += timedelta(days=30)
+        elif self.frequency == "Weekly":
+            self.next_due_date += timedelta(days=7)
+        elif self.frequency == "Yearly":
+            self.next_due_date += timedelta(days=365)
 
-        if self.frequency == "weekly":
-            self.next_due_date += timedelta(weeks=1)
-        elif self.frequency == "monthly":
-            self.next_due_date = self.next_due_date.replace(
-                month=self.next_due_date.month % 12 + 1
-            )
-        elif self.frequency == "yearly":
-            self.next_due_date = self.next_due_date.replace(year=self.next_due_date.year + 1)
-
+        print(self.next_due_date)
 
 class Graph:
     def __init__(self, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
@@ -130,7 +137,7 @@ class Graph:
             raise ValueError("Recurring bills must have a frequency and next_due_date.")
         self.recurring_bills.append(bill)
 
-    def process_recurring_bills(self, current_date):
+    def process_recurring_bills(self, current_date, notify_user_callback):###
         """
         Check and process all recurring bills due by the given date.
         """
@@ -138,7 +145,7 @@ class Graph:
         for bill in self.recurring_bills:
             if bill.next_due_date and bill.next_due_date <= current_date:
                 # Add the bill to the graph as a one-time bill
-                self.add_bill(Bill(bill.payer, bill.amount, bill.participants))
+                notify_user_callback(bill)###
                 # Update the next due date
                 bill.update_next_due_date()
 
@@ -265,12 +272,38 @@ class Graph:
         balance = self.calculate_balances()
         net_balances = [(person, bal) for person, bal in balance.items() if bal != 0]
 
+        def adjust_to_zero(net_balances, favor="creditor"):
+            """
+            Adjust balances to ensure total sums to zero.
+            :param favor: 'creditor' (default) favors reducing creditor balances;
+                        'debtor' favors increasing debtor balances.
+            """
+            total = sum(balance for _, balance in net_balances)
+            if abs(total) > 0.01:  # If there is a rounding error
+                if favor == "creditor":
+                    # Adjust the largest positive balance
+                    max_person, max_balance = max(net_balances, key=lambda x: x[1])
+                    adjusted_balances = [
+                        (person, balance if person != max_person else balance - total)
+                        for person, balance in net_balances
+                    ]
+                elif favor == "debtor":
+                    # Adjust the largest negative balance
+                    min_person, min_balance = min(net_balances, key=lambda x: x[1])
+                    adjusted_balances = [
+                        (person, balance if person != min_person else balance - total)
+                        for person, balance in net_balances
+                    ]
+                return adjusted_balances
+            return net_balances
+
         # Step 2: Simplify using the algorithm
         def settle_debts(net_balances):
             if not net_balances:
                 return []
 
             # Sort balances and find most positive and most negative
+            net_balances = adjust_to_zero(net_balances)
             net_balances.sort(key=lambda x: x[1])
             min_person, min_amount = net_balances[0]  # Most negative
             max_person, max_amount = net_balances[-1]  # Most positive
@@ -286,7 +319,7 @@ class Graph:
             net_balances[-1] = (max_person, max_amount - settle_amount)
 
             # Remove zero balances
-            net_balances = [entry for entry in net_balances if entry[1] != 0]
+            net_balances = [entry for entry in net_balances if abs(entry[1]) > 0.01]
 
             # Recur with the updated balances
             return [transaction] + settle_debts(net_balances)
@@ -350,7 +383,7 @@ if __name__ == "__main__":
     # print(dict(dick))
 
     mcf = group.graph.minimize_cash_flow()
-    # print(mcf)
+    print(mcf)
 
     # # Get summary
     # summary = group.get_summary()

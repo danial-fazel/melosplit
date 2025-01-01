@@ -20,6 +20,7 @@ from kivy.uix.screenmanager import Screen
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.pickers import MDDatePicker
 from collections import defaultdict
+import networkx as nx
 
 
 # Firebase imports
@@ -34,7 +35,8 @@ firebase_admin.initialize_app(cred, {
 
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')
-    uid = email[:at_sign] ##
+    email = email[:at_sign]
+    uid = re.sub(r'[.#$/\[\]]', '_', email) # remove special characters
     ref = db.reference("/users/")
     ref.child(email).set({"{uid}": name})
 
@@ -74,9 +76,11 @@ def save_group_to_firebase():
     group_ref = db.reference(f"groups/{the_group.name}")
     group_ref.update({
         "members": the_group.members or {},
+        "category": "",
+        "description": the_group.get_category(),
         "edges": edges_dict or {},
         # "transactions": the_group.graph.transactions or [],
-        "recurring_bills": the_group.graph.recurring_bills,
+        "recurring_bills": list(the_group.graph.recurring_bills),
         "category_totals": dict(the_group.graph.category_totals),
     })
 
@@ -87,9 +91,9 @@ class LoginScreen(MDScreen):
         password = self.ids.password_input.text.strip()
         
         # Convert email to a safe key
-        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
         at_sign = email.find('@') ##
         safe_email = email[:at_sign]
+        safe_email = re.sub(r'[.#$/\[\]]', '_', safe_email) # Replace special characters with underscore
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -117,9 +121,9 @@ class SignupScreen(MDScreen):
         password = self.ids.password_input.text.strip()
 
         # # Convert email to a safe key
-        # safe_email = re.sub(r'[.#$/\[\]]', '_', email)
         at_sign = email.find('@') ##
-        safe_email = email[:at_sign]
+        email = email[:at_sign]
+        safe_email = re.sub(r'[.#$/\[\]]', '_', email)
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -222,7 +226,7 @@ class GroupManagerScreen(Screen):
             members= group_data.get("members", {}),
             edges=edges,
             # transactions=list(group_data.get("transactions", {}).values()),
-            recurring_bills=group_data.get("recurring_bills", []),
+            recurring_bills=list(group_data.get("recurring_bills", [])),
             category_totals=defaultdict(float, group_data.get("category_totals", {})),
         )
 
@@ -236,6 +240,7 @@ class AddGroupScreen(Screen):
         """Validate group name and number of members, then navigate to member input screen."""
         group_name = self.ids.group_name_input.text.strip()
         num_members = self.ids.num_members_input.text.strip()
+        description = self.ids.description_input.text.strip()
 
         if not group_name:
             toast("Please enter a group name.")
@@ -251,6 +256,7 @@ class AddGroupScreen(Screen):
 
         global the_group
         the_group = Group(group_name)
+        the_group.discript(description)
         self.manager.current = "member_inputs_screen"
 
 
@@ -287,6 +293,7 @@ class MemberInputsScreen(Screen):
             if name:
                 if email:
                     # Validate email and fetch UID
+                    email = re.sub(r'[.#$/\[\]]', '_', email)###
                     member_uid = email.split('@')[0] ##
                     # user_ref = db.reference(f"/users/{member_uid}")
                     # user_data = user_ref.get()
@@ -533,6 +540,9 @@ class TransactionHistoryWidget(MDBoxLayout):
 
 
 class MemberSummaryScreen(Screen):
+    add_member_dialog = None
+    remove_member_dialog = None
+
     def on_enter(self):
         """Populate the screen with member data when the screen is entered."""
         self.populate_member_summary()
@@ -546,6 +556,8 @@ class MemberSummaryScreen(Screen):
         global the_group
         summary = the_group.get_summary()
         balances = the_group.get_balances()
+
+        # print(the_group.graph.visualize_graph())
 
         # Clear existing content
         self.ids.member_list.clear_widgets()
@@ -570,6 +582,92 @@ class MemberSummaryScreen(Screen):
         self.ids.category_summary_label.text = "Category Summary: " + ", ".join(
             [f"{category}: {amount:.2f}" for category, amount in category_summary.items()]
         )
+
+        print(dict(the_group.graph.edges)) # Just checking the graph
+        print(dict(the_group.members))
+
+    def open_add_member_dialog(self):
+        """Open a dialog to input new member details."""
+        if not self.add_member_dialog:
+            self.add_member_dialog = MDDialog(
+                title="Add Member",
+                type="custom",
+                content_cls=MDBoxLayout(
+                    MDTextField(hint_text="Member Name", id="member_name", text=""),
+                    MDTextField(hint_text="Member Email (Optional)", id="member_email"),
+                    orientation="vertical",
+                    spacing="10dp",
+                    size_hint_y=None,
+                    height="150dp",
+                ),
+                buttons=[
+                    MDRaisedButton(text="Cancel", on_release=lambda x: self.add_member_dialog.dismiss()),
+                    MDRaisedButton(text="Add", on_release=self.add_member),
+                ],
+            )
+        else:
+            # Clear the input fields
+            self.add_member_dialog.content_cls.ids.member_name.text = ""
+            self.add_member_dialog.content_cls.ids.member_email.text = ""
+        self.add_member_dialog.open()
+
+    def add_member(self, *args):
+        """Add a member to the group."""
+        member_name = self.add_member_dialog.content_cls.ids.member_name.text.strip()
+        member_email = self.add_member_dialog.content_cls.ids.member_email.text.strip()
+
+        if not member_name:
+            toast("Member name is required.")
+            return
+
+        # Use email to create UID or default to the name
+        member_uid = member_email.split('@')[0] if member_email else member_name #TODO
+
+        global the_group
+        the_group.add_member(member_name, member_uid)
+        save_group_to_firebase()
+
+        # Refresh UI
+        self.populate_member_summary()
+        toast(f"Member '{member_name}' added successfully.")
+        self.add_member_dialog.dismiss()
+
+    def open_remove_member_dialog(self):
+        """Open a dialog to select members to remove."""
+        global the_group
+        members = the_group.members
+
+        # Create the dialog content dynamically
+        participants = {uid: name for uid, name in members.items()}
+        self.remove_member_dialog = ParticipantDialog2(participants, self.update_selected_members, "Remove")
+        self.remove_member_dialog.open()
+
+    def update_selected_members(self, selected_members):
+        """Update the internal state with selected members for removal."""
+        self.selected_members_to_remove = selected_members
+        self.remove_members()
+
+    def remove_members(self, *args):
+        """Remove selected members from the group."""
+        global the_group
+        selected_members = self.selected_members_to_remove
+
+        if not selected_members:
+            toast("No members selected for removal.")
+            return
+
+        for uid in selected_members:
+            the_group.remove_member(uid)
+
+        save_group_to_firebase()
+
+        # Refresh UI
+        self.populate_member_summary()
+        toast("Selected members removed successfully.")
+        self.remove_member_dialog.dismiss()
+
+
+
         
     def go_back(self):
         """Navigate back to the GroupScreen."""
@@ -714,9 +812,9 @@ class AddExpenseScreen(Screen):
             split_type=split_type,
             custom_splits=custom_splits,
         )
-        print(f"\nA:\n{dict(group_graph.edges)}")
-        print(f"\n\nB:\n{dict(group_graph.category_totals)}\n")
-        print(the_group.members)
+        # print(f"\nA:\n{dict(group_graph.edges)}")
+        # print(f"\n\nB:\n{dict(group_graph.category_totals)}\n")
+        # print(the_group.members)
 
         save_group_to_firebase()
 
@@ -765,7 +863,6 @@ from kivymd.uix.textfield import MDTextField
 from kivymd.uix.list import OneLineListItem, MDList
 from kivy.uix.scrollview import ScrollView
 
-
 class ParticipantDialog:
     def __init__(self, participants, on_submit, split_type="Equally"):
         """
@@ -786,13 +883,13 @@ class ParticipantDialog:
         list_view = MDList()
 
         # Add participant inputs or checkboxes
-        for name in participants:
+        for uid, name in participants.items():
             item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
 
             if split_type == "Equally":
                 # For "Equally", use checkboxes only
                 checkbox = MDCheckbox(size_hint_x=0.1)
-                checkbox.bind(active=lambda _, active, name=name: self.toggle_selection(active, name))
+                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
                 item.add_widget(checkbox)
             else:
                 # For other split types, use input fields only
@@ -803,7 +900,7 @@ class ParticipantDialog:
                     pos_hint={"center_y": 0.5},  # Adjust alignment
                 )
                 item.add_widget(input_field)
-                self.selected_participants[name] = {"selected": True, "value": input_field}
+                self.selected_participants[uid] = {"selected": True, "value": input_field}
 
             label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
             item.add_widget(label)
@@ -860,6 +957,97 @@ class ParticipantDialog:
             return "Enter amount"
         else:
             return ""
+
+
+class ParticipantDialog2:
+    def __init__(self, participants, on_submit, action="Select", split_type="Equally"):
+        """
+        :param participants: Dictionary of participant IDs and names.
+        :param on_submit: Callback function to handle selected participants.
+        :param action: The action type (e.g., "Select", "Remove").
+        :param split_type: The split type for expenses (e.g., "Equally", "Custom").
+        """
+        self.participants = participants
+        self.action = action
+        self.split_type = split_type
+        self.selected_participants = {}
+        self.on_submit = on_submit
+
+        # Create dialog content
+        self.dialog_content = MDBoxLayout(orientation="vertical", spacing=10, size_hint_y=None)
+        self.dialog_content.height = len(participants) * 60 + 20
+
+        scroll = ScrollView()
+        list_view = MDList()
+
+        # Add participant inputs or checkboxes
+        for uid, name in participants.items():
+            item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
+
+            if split_type == "Equally" or action == "Remove":
+                # For "Equally" or "Remove", use checkboxes only
+                checkbox = MDCheckbox(size_hint_x=0.1)
+                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
+                item.add_widget(checkbox)
+            else:
+                # For other split types, use input fields only
+                input_field = MDTextField(
+                    hint_text=self.get_hint_text(),
+                    size_hint_x=0.4,
+                    halign="center",
+                    pos_hint={"center_y": 0.5},  # Adjust alignment
+                )
+                item.add_widget(input_field)
+                self.selected_participants[uid] = {"selected": True, "value": input_field}
+
+            label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
+            item.add_widget(label)
+
+            list_view.add_widget(item)
+
+        scroll.add_widget(list_view)
+        self.dialog_content.add_widget(scroll)
+
+        # Create dialog
+        self.dialog = MDDialog(
+            title=f"{self.action} Participants",
+            type="custom",
+            content_cls=self.dialog_content,
+            buttons=[
+                MDFlatButton(text="CANCEL", on_release=self.dismiss),
+                MDRaisedButton(text="OK", on_release=self.submit),
+            ],
+        )
+
+    def open(self):
+        """Open the dialog."""
+        self.dialog.open()
+
+    def dismiss(self, *args):
+        """Close the dialog."""
+        self.dialog.dismiss()
+
+    def toggle_selection(self, active, uid):
+        """Toggle participant selection."""
+        if active:
+            self.selected_participants[uid] = True
+        else:
+            self.selected_participants.pop(uid, None)
+
+    def submit(self, *args):
+        """Submit selected participants."""
+        self.on_submit(self.selected_participants)
+        self.dismiss()
+
+    def get_hint_text(self):
+        """Get hint text based on split type."""
+        if self.split_type == "Custom":
+            return "Amount"
+        elif self.split_type == "By Percentage":
+            return "Percentage"
+        elif self.split_type == "By Shares":
+            return "Shares"
+        return ""
 
 
 class AddRecurringBillScreen(Screen):
@@ -956,11 +1144,24 @@ class AddRecurringBillScreen(Screen):
         except ValueError:
             toast("Invalid amount!")
             return
+        
+        custom_splits = self.selected_participants
 
+        if split_type == "By Shares" and sum(custom_splits.values()) <= 0:
+            self.ids.error_label.text = "Total shares must be greater than zero!"
+            return
+        if split_type == "By Percentage" and abs(sum(custom_splits.values()) - 100) > 0.01:
+            self.ids.error_label.text = "Total percentage must equal 100!"
+            return
+        if split_type == "Custom" and abs(sum(custom_splits.values()) - amount) > 0.01:
+            self.ids.error_label.text = "Custom amounts must sum to the total amount!"
+            return
+        
         # Initialize or load the group graph
+        global the_group
         group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)
-
+        group_graph = the_group.graph
+        
         # Add the recurring bill
         group_graph.add_recurring_bill(
             Bill(
@@ -971,6 +1172,17 @@ class AddRecurringBillScreen(Screen):
                 frequency=frequency,
                 next_due_date=str(self.next_due_date),
             )
+        )
+
+        group_graph.add_bill(
+            Bill(
+                payer=payer,
+                amount=amount,
+                participants=list(self.selected_participants),
+                category="",
+            ),
+            split_type=split_type,
+            custom_splits=custom_splits,
         )
 
         # Save the recurring bill to Firebase
@@ -985,21 +1197,38 @@ class AddRecurringBillScreen(Screen):
             "description": description,
         })
 
+        transaction_ref = db.reference(f"groups/{group_name}/transactions")
+        transaction_ref.push({
+            "payer": payer,
+            "participants": self.selected_participants,
+            "amount": amount,
+            "description": description,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
         toast("Recurring bill added successfully.")
         self.manager.current = "group_screen"
 
-    def get_group_graph(self, group_name):
-        """Retrieve or initialize the graph for a specific group."""
-        group_ref = db.reference(f"groups/{group_name}/graph")
-        group_graph = Graph()
-        return group_graph
+    def prefill_form(self, group_name, bill):
+        """Pre-fill the form with recurring bill details."""
+        self.ids.payer_name.text = ", ".join(bill.payer if isinstance(bill.payer, list) else [bill.payer])
+        self.ids.amount.text = str(bill.amount)
+        self.ids.split_type.text = bill.split_type
+        self.ids.frequency.text = bill.frequency
+        self.ids.selected_date_label.text = f"Next Due Date: {bill.next_due_date.strftime('%Y-%m-%d')}"
+        self.group_name = group_name  # Track the group name for saving changes
+        App.get_running_app().group_name = self.group_name
+        self.selected_participants = {p: 0 for p in bill.participants}
 
+
+
+from functools import partial
 
 class SettleUpScreen(Screen):
     def on_enter(self):
         """Generate and display the settle-up transactions when the screen is opened."""
-        group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)  # Always fetch the latest graph data
+        global the_group
+        group_graph = the_group.graph  # Always fetch the latest graph data
 
         # Get simplified transactions
         simplified_transactions = group_graph.minimize_cash_flow()
@@ -1028,34 +1257,14 @@ class SettleUpScreen(Screen):
                         size_hint_x=0.7,
                     )
                 )
-                item.add_widget(
-                    MDRaisedButton(
-                        text="Settle Payment",
-                        size_hint_x=0.3,
-                        on_release=lambda p=payer, py=payee, a=amount: self.settle_payment(p, py, a),
-                    )
+                # Use functools.partial to bind arguments correctly
+                settle_button = MDRaisedButton(
+                    text="Settle Payment",
+                    size_hint_x=0.3,
+                    on_release=lambda p=payer, py=payee, a=amount: self.settle_payment(p, py, a),
                 )
+                item.add_widget(settle_button)
                 settle_up_list.add_widget(item)
-
-    def get_group_graph(self, group_name):
-        """Build and return the graph dynamically from the transaction history in Firebase."""
-        transaction_ref = db.reference(f"groups/{group_name}/transactions")
-        transactions = transaction_ref.get() or {}
-
-        graph = Graph()
-
-        # Recreate the graph using transaction history
-        for transaction in transactions.values():
-            payer = transaction.get("payer")
-            amount = transaction.get("amount", 0)
-            participants = transaction.get("participants", [])
-
-            # Add each participant's share of the transaction to the graph
-            for participant in participants:
-                if payer and participant and participant != payer:
-                    graph.add_transaction(payer, participant, amount / len(participants))
-
-        return graph
 
     def settle_payment(self, payer, payee, amount):
         """Navigate to the settle payment screen with transaction details."""
@@ -1066,12 +1275,16 @@ class SettleUpScreen(Screen):
         app.root.current = "settle_payment_screen"
 
 
+
 class SettlePaymentScreen(Screen):
     def confirm_payment(self):
         """Record the payment in the group graph and Firebase."""
         payer = self.ids.payer_name.text.strip()
         payee = self.ids.payee_name.text.strip()
         amount = self.ids.amount.text.strip()
+
+        global the_group
+        group_graph = the_group.graph 
 
         if not payer or not payee or not amount:
             toast("All fields are required!")
@@ -1085,8 +1298,8 @@ class SettlePaymentScreen(Screen):
 
         # Update group graph
         group_name = App.get_running_app().group_name
-        group_graph = self.get_group_graph(group_name)
         group_graph.add_transaction(payer, payee, -amount)  # Negative amount to indicate payment
+
 
         # Record the payment in Firebase
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
@@ -1101,16 +1314,231 @@ class SettlePaymentScreen(Screen):
         toast("Payment recorded successfully.")
         self.manager.current = "settle_up_screen"
 
-    def get_group_graph(self, group_name):
-        """Retrieve or initialize the graph for a specific group."""
-        group_ref = db.reference(f"groups/{group_name}/graph")
-        group_graph = Graph()
-        return group_graph
+# from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+# import matplotlib.pyplot as plt
 
-    
+class GraphVisualizationScreen(Screen):
+    def on_enter(self):
+        """Render the graph when the screen is displayed."""
+        global the_group  # Access the global group data
+        group_graph = the_group.graph  # Get the group's graph
+        group_graph.visualize_graph()
 
-class UserProfileScreen():
+        # # Generate the NetworkX graph and plot it
+        # nx_graph = group_graph.generate_networkx_graph()
+        # fig, ax = plt.subplots()
+        # pos = nx.spring_layout(nx_graph)
+        # nx.draw(nx_graph, pos, with_labels=True, ax=ax)
+
+        # # Embed the graph into Kivy
+        # canvas = FigureCanvasKivyAgg(fig)
+        # self.ids.graph_container.clear_widgets()  # Ensure the container is empty
+        # self.ids.graph_container.add_widget(canvas)
+
+
+class UserProfileScreen(Screen):
     """calculating and showing the user net balance in all their groups,the ability to change password and log out"""
+    def on_enter(self):
+        """Update the user's net balance and check for notifications when entering the screen."""
+        self.update_net_balance()
+
+    def update_net_balance(self):
+        """Calculate and display the user's net balance across all groups."""
+        user_uid = App.get_running_app().user_uid
+        total_balance = 0.0
+
+        # Fetch all groups the user belongs to
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+        groups = user_groups_ref.get() or {}
+
+        for group_name in groups:
+            # Fetch group data
+            group_ref = db.reference(f"groups/{group_name}")
+            group_data = group_ref.get()
+            if not group_data:
+                continue
+
+            # Calculate user balance in the group
+            edges = defaultdict(lambda: defaultdict(float), group_data.get("edges", {}))
+            graph = Graph(edges)
+            group_balances = graph.calculate_balances()
+            total_balance += group_balances.get(user_uid, 0.0)
+
+        # Update the label in the UI
+        self.ids.net_balance_label.text = f"Your Net Balance in overal: {total_balance:.2f} USD"
+
+
+class NotificationScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.notifications = []  # List to store active notifications
+
+    def on_enter(self):
+        """Refresh the notification list when entering the screen."""
+        self.refresh_notifications()
+
+    def refresh_notifications(self):
+        """Fetch due recurring bills and update notifications."""
+        self.notifications.clear()
+        self.clear_notification_widgets()
+        
+        user_uid = App.get_running_app().user_uid
+        current_date = datetime.now()
+
+        # Fetch groups the user belongs to
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+        groups = user_groups_ref.get() or {}
+
+        for group_name in groups:
+            group_ref = db.reference(f"groups/{group_name}/recurring_bills")
+            recurring_bills_data = group_ref.get()
+
+            if not recurring_bills_data:
+                continue
+
+            # Handle both dictionary and list structures for recurring bills
+            if isinstance(recurring_bills_data, dict):
+                for bill_id, bill_data in recurring_bills_data.items():
+                    self.add_due_bill(group_name, bill_id, bill_data, current_date)
+            elif isinstance(recurring_bills_data, list):
+                for bill_id in recurring_bills_data:
+                    bill_data = db.reference(f"groups/{group_name}/recurring_bills/{bill_id}").get()
+                    if bill_data:
+                        self.add_due_bill(group_name, bill_id, bill_data, current_date)
+
+        # Refresh the UI with notifications
+        self.show_notifications()
+
+    def add_due_bill(self, group_name, bill_id, bill_data, current_date):
+        """Add a bill to the notification list if it's due."""
+        try:
+            # Ensure `next_due_date` is a valid string
+            next_due_date = bill_data.get("next_due_date")
+            if isinstance(next_due_date, datetime):
+                next_due_date = next_due_date.strftime("%Y-%m-%d")
+            elif not isinstance(next_due_date, str):
+                return  # Skip invalid dates
+
+            # Parse `next_due_date` and check if it's due
+            next_due_date = datetime.strptime(next_due_date, "%Y-%m-%d")
+            if next_due_date > current_date:
+                return  # Skip bills that are not due
+
+            self.notifications.append({
+                "group_name": group_name,
+                "bill_id": bill_id,
+                "bill_data": bill_data,
+            })
+        except Exception as e:
+            print(f"Error adding due bill: {e}")
+
+    def show_notifications(self):
+        """Display notifications on the screen."""
+        self.clear_notification_widgets()
+
+        for notification in self.notifications:
+            bill_data = notification["bill_data"]
+            group_name = notification["group_name"]
+            bill_id = notification["bill_id"]
+
+            category = bill_data.get("category", "Uncategorized")
+            amount = bill_data.get("amount", 0.0)
+            next_due_date = bill_data.get("next_due_date", "Unknown Date")
+            message = f"{category}: {amount} USD - Due {next_due_date} in {group_name}"
+
+            def confirm_callback(instance, notif=notification):
+                self.confirm_notification(notif)
+
+            def dismiss_callback(instance, notif=notification):
+                self.dismiss_notification(notif)
+
+            def edit_callback(instance, notif=notification):
+                self.edit_recurring_bill(
+                    notif["group_name"], notif["bill_data"], notif["bill_id"]
+                )
+
+            # Add the notification widget with the Edit option
+            self.add_notification_widget(message, confirm_callback, dismiss_callback, edit_callback)
+
+
+    def confirm_notification(self, notification):
+        """Handle confirmation of a notification."""
+        group_name = notification["group_name"]
+        bill_id = notification["bill_id"]
+        bill_data = notification["bill_data"]
+
+        try:
+            # Update the next due date
+            bill = Bill(
+                payer=bill_data["payer"],
+                amount=bill_data["amount"],
+                participants=bill_data["participants"],
+                frequency=bill_data["frequency"],
+                next_due_date=bill_data.get("next_due_date"),
+                category=bill_data.get("category", "Uncategorized"),
+                split_type=bill_data.get("split_type", "Equally"),
+                description=bill_data.get("description", ""),
+            )
+            bill.update_next_due_date()
+            db.reference(f"groups/{group_name}/recurring_bills/{bill_id}").update({
+                "next_due_date": bill.next_due_date.strftime("%Y-%m-%d")
+            })
+        except Exception as e:
+            print(f"Error confirming notification: {e}")
+
+        # Remove the notification from the list and refresh UI
+        self.notifications.remove(notification)
+        self.show_notifications()
+
+    def dismiss_notification(self, notification):
+        """Remove the notification from the list without making changes."""
+        self.notifications.remove(notification)
+        self.show_notifications()
+
+    def add_notification_widget(self, message, confirm_callback, dismiss_callback, edit_callback):
+        """Add a notification widget to the UI."""
+        layout = self.ids.notification_list
+        notification_item = NotificationItem()
+        notification_item.ids.message_label.text = message
+        notification_item.ids.confirm_button.bind(on_release=confirm_callback)
+        notification_item.ids.dismiss_button.bind(on_release=dismiss_callback)
+        notification_item.ids.edit_button.bind(on_release=edit_callback)
+        layout.add_widget(notification_item)
+
+
+    def clear_notification_widgets(self):
+        """Clear all notification widgets from the UI."""
+        self.ids.notification_list.clear_widgets()
+    
+    def edit_recurring_bill(self, group_name, bill_data, bill_id):
+        """Pre-fill the Add Recurring Bill screen with the selected bill."""
+        bill = Bill(**bill_data)
+        global the_group
+
+        # Fetch the group data
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
+        # Extract recurring bills
+        recurring_bills = group_data.get("recurring_bills", {})
+
+        # Initialize `the_group` with the correct group data
+        the_group = Group(
+            name=group_name,
+            members=group_data.get("members", {}),
+            edges=defaultdict(lambda: defaultdict(float), group_data.get("edges", {})),
+            recurring_bills=list(recurring_bills.values()),  # Convert to list if needed
+            category_totals=defaultdict(float, group_data.get("category_totals", {})),
+        )
+
+        # Pre-fill the form with the bill's data
+        add_bill_screen = self.manager.get_screen("add_recurring_bill_screen")
+        add_bill_screen.prefill_form(group_name, bill)
+        
+        # Navigate to the "Add Recurring Bill" screen
+        self.manager.current = "add_recurring_bill_screen"
+
+class NotificationItem(MDBoxLayout):
     pass
 
 class ParticipantListItem(OneLineAvatarIconListItem):

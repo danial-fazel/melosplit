@@ -10,8 +10,10 @@
     MemberSummaryScreen:
     SettleUpScreen:
     SettlePaymentScreen:
+    GraphVisualizationScreen:
     UserProfileScreen:
     NotificationScreen:
+
 
 <LoginScreen>:
     name: "login"
@@ -331,6 +333,21 @@
                 text: "Settle Up"
                 on_release: root.settle_up()
 
+            MDRaisedButton:
+                text: "See Graph"
+                size_hint: None, None
+                size: "200dp", "50dp"
+                pos_hint: {"center_x": 0.5}
+                on_release: app.root.current = "graph_visualization_screen"
+
+            MDRaisedButton:
+                text: "Add Member"
+                on_release: root.open_add_member_dialog()
+            MDRaisedButton:
+                text: "Remove Member"
+                on_release: root.open_remove_member_dialog()
+
+
 <AddExpenseScreen>:
     name: "add_expense_screen"
 
@@ -512,6 +529,22 @@
             text: "Back"
             on_release: app.root.current = "settle_up_screen"
 
+<GraphVisualizationScreen>:
+    name: "graph_visualization_screen"
+    BoxLayout:
+        orientation: "vertical"
+        id: graph_container
+        BoxLayout:
+            size_hint_y: None
+            height: "50dp"
+            orientation: "horizontal"
+            padding: "10dp"
+            Button:
+                text: "Back"
+                size_hint: None, None
+                size: "100dp", "40dp"
+                on_release: app.root.current = "member_summary_screen"
+
 <UserProfileScreen>:
     name: "user_profile_screen"
     BoxLayout:
@@ -581,3 +614,4 @@
         MDRaisedButton:
             id: dismiss_button
             text: "Dismiss"
+

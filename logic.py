@@ -46,7 +46,7 @@ class Group:
 
         # Remove the member
         del self.members[member]
-        print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
+        # print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
 
     def get_summary(self):
         """

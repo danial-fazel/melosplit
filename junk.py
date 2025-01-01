@@ -33,16 +33,133 @@
 
 
 
-# Firebase imports
-import firebase_admin
-from firebase_admin import credentials, db
+# # Firebase imports
+# import firebase_admin
+# from firebase_admin import credentials, db
 
-# Initialize Firebase
-cred = credentials.Certificate("melosplit-firebase.json")
-firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
-})
-member_ref = db.reference(f"/users/xxzrqywg")
-member_data = member_ref.get()
-member_groups = member_data.get("groups")
-print(member_groups)
+# # Initialize Firebase
+# cred = credentials.Certificate("melosplit-firebase.json")
+# firebase_admin.initialize_app(cred, {
+#     "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
+# })
+# member_ref = db.reference(f"/users/xxzrqywg")
+# member_data = member_ref.get()
+# member_groups = member_data.get("groups")
+# print(member_groups)
+
+# from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+# import matplotlib.pyplot as plt
+# from kivy.app import App
+# from kivy.uix.boxlayout import BoxLayout
+
+# class TestApp(App):
+#     def build(self):
+#         layout = BoxLayout()
+#         fig, ax = plt.subplots()
+#         ax.plot([0, 1, 2], [0, 1, 4])
+#         canvas = FigureCanvasKivyAgg(fig)
+#         layout.add_widget(canvas)
+#         return layout
+
+# if __name__ == "__main__":
+#     TestApp().run()
+
+
+
+
+# old good one - safe for add expense
+
+# class ParticipantDialog:
+#     def __init__(self, participants, on_submit, split_type="Equally"):
+#         """
+#         :param participants: List of participant names.
+#         :param on_submit: Callback function to handle selected participants.
+#         :param split_type: The split type (e.g., "Equally", "By Percentage", "By Shares", "Custom").
+#         """
+#         self.participants = participants
+#         self.split_type = split_type
+#         self.selected_participants = {}
+#         self.on_submit = on_submit
+
+#         # Create dialog content
+#         self.dialog_content = MDBoxLayout(orientation="vertical", spacing=10, size_hint_y=None)
+#         self.dialog_content.height = len(participants) * 60 + 20
+
+#         scroll = ScrollView()
+#         list_view = MDList()
+
+#         # Add participant inputs or checkboxes
+#         for uid, name in participants.items():
+#             item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
+
+#             if split_type == "Equally":
+#                 # For "Equally", use checkboxes only
+#                 checkbox = MDCheckbox(size_hint_x=0.1)
+#                 checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
+#                 item.add_widget(checkbox)
+#             else:
+#                 # For other split types, use input fields only
+#                 input_field = MDTextField(
+#                     hint_text=self.get_hint_text(),
+#                     size_hint_x=0.4,
+#                     halign="center",
+#                     pos_hint={"center_y": 0.5},  # Adjust alignment
+#                 )
+#                 item.add_widget(input_field)
+#                 self.selected_participants[uid] = {"selected": True, "value": input_field}
+
+#             label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
+#             item.add_widget(label)
+
+#             list_view.add_widget(item)
+
+#         scroll.add_widget(list_view)
+#         self.dialog_content.add_widget(scroll)
+
+#         # Create dialog
+#         self.dialog = MDDialog(
+#             title=f"Select Participants ({split_type})",
+#             type="custom",
+#             content_cls=self.dialog_content,
+#             buttons=[
+#                 MDFlatButton(text="CANCEL", on_release=self.dismiss),
+#                 MDRaisedButton(text="OK", on_release=self.submit),
+#             ],
+#         )
+
+#     def open(self):
+#         """Open the dialog."""
+#         self.dialog.open()
+
+#     def dismiss(self, *args):
+#         """Close the dialog."""
+#         self.dialog.dismiss()
+
+#     def toggle_selection(self, active, name):
+#         """Toggle participant selection."""
+#         if self.split_type == "Equally":
+#             self.selected_participants[name] = {"selected": active}
+
+#     def submit(self, *args):
+#         """Submit selected participants and values."""
+#         if self.split_type == "Equally":
+#             selected = {name: 0 for name, field in self.selected_participants.items() if field["selected"]}
+#         else:
+#             selected = {
+#                 name: float(field["value"].text) if field["value"].text.strip() else 0
+#                 for name, field in self.selected_participants.items()
+#             }
+
+#         self.on_submit(selected)
+#         self.dismiss()
+
+#     def get_hint_text(self):
+#         """Return appropriate hint text based on the split type."""
+#         if self.split_type == "By Shares":
+#             return "Enter shares"
+#         elif self.split_type == "By Percentage":
+#             return "Enter %"
+#         elif self.split_type == "Custom":
+#             return "Enter amount"
+#         else:
+#             return ""

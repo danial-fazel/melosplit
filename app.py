@@ -80,7 +80,7 @@ def save_group_to_firebase():
         "description": the_group.get_category(),
         "edges": edges_dict or {},
         # "transactions": the_group.graph.transactions or [],
-        "recurring_bills": dict(the_group.graph.recurring_bills),
+        "recurring_bills": list(the_group.graph.recurring_bills),
         "category_totals": dict(the_group.graph.category_totals),
     })
 
@@ -540,6 +540,9 @@ class TransactionHistoryWidget(MDBoxLayout):
 
 
 class MemberSummaryScreen(Screen):
+    add_member_dialog = None
+    remove_member_dialog = None
+
     def on_enter(self):
         """Populate the screen with member data when the screen is entered."""
         self.populate_member_summary()
@@ -581,6 +584,89 @@ class MemberSummaryScreen(Screen):
         )
 
         print(dict(the_group.graph.edges)) # Just checking the graph
+        print(dict(the_group.members))
+
+    def open_add_member_dialog(self):
+        """Open a dialog to input new member details."""
+        if not self.add_member_dialog:
+            self.add_member_dialog = MDDialog(
+                title="Add Member",
+                type="custom",
+                content_cls=MDBoxLayout(
+                    MDTextField(hint_text="Member Name", id="member_name", text=""),
+                    MDTextField(hint_text="Member Email (Optional)", id="member_email"),
+                    orientation="vertical",
+                    spacing="10dp",
+                    size_hint_y=None,
+                    height="150dp",
+                ),
+                buttons=[
+                    MDRaisedButton(text="Cancel", on_release=lambda x: self.add_member_dialog.dismiss()),
+                    MDRaisedButton(text="Add", on_release=self.add_member),
+                ],
+            )
+        else:
+            # Clear the input fields
+            self.add_member_dialog.content_cls.ids.member_name.text = ""
+            self.add_member_dialog.content_cls.ids.member_email.text = ""
+        self.add_member_dialog.open()
+
+    def add_member(self, *args):
+        """Add a member to the group."""
+        member_name = self.add_member_dialog.content_cls.ids.member_name.text.strip()
+        member_email = self.add_member_dialog.content_cls.ids.member_email.text.strip()
+
+        if not member_name:
+            toast("Member name is required.")
+            return
+
+        # Use email to create UID or default to the name
+        member_uid = member_email.split('@')[0] if member_email else member_name #TODO
+
+        global the_group
+        the_group.add_member(member_name, member_uid)
+        save_group_to_firebase()
+
+        # Refresh UI
+        self.populate_member_summary()
+        toast(f"Member '{member_name}' added successfully.")
+        self.add_member_dialog.dismiss()
+
+    def open_remove_member_dialog(self):
+        """Open a dialog to select members to remove."""
+        global the_group
+        members = the_group.members
+
+        # Create the dialog content dynamically
+        participants = {uid: name for uid, name in members.items()}
+        self.remove_member_dialog = ParticipantDialog2(participants, self.update_selected_members, "Remove")
+        self.remove_member_dialog.open()
+
+    def update_selected_members(self, selected_members):
+        """Update the internal state with selected members for removal."""
+        self.selected_members_to_remove = selected_members
+        self.remove_members()
+
+    def remove_members(self, *args):
+        """Remove selected members from the group."""
+        global the_group
+        selected_members = self.selected_members_to_remove
+
+        if not selected_members:
+            toast("No members selected for removal.")
+            return
+
+        for uid in selected_members:
+            the_group.remove_member(uid)
+
+        save_group_to_firebase()
+
+        # Refresh UI
+        self.populate_member_summary()
+        toast("Selected members removed successfully.")
+        self.remove_member_dialog.dismiss()
+
+
 
         
     def go_back(self):
@@ -777,7 +863,6 @@ from kivymd.uix.textfield import MDTextField
 from kivymd.uix.list import OneLineListItem, MDList
 from kivy.uix.scrollview import ScrollView
 
-
 class ParticipantDialog:
     def __init__(self, participants, on_submit, split_type="Equally"):
         """
@@ -872,6 +957,97 @@ class ParticipantDialog:
             return "Enter amount"
         else:
             return ""
+
+
+class ParticipantDialog2:
+    def __init__(self, participants, on_submit, action="Select", split_type="Equally"):
+        """
+        :param participants: Dictionary of participant IDs and names.
+        :param on_submit: Callback function to handle selected participants.
+        :param action: The action type (e.g., "Select", "Remove").
+        :param split_type: The split type for expenses (e.g., "Equally", "Custom").
+        """
+        self.participants = participants
+        self.action = action
+        self.split_type = split_type
+        self.selected_participants = {}
+        self.on_submit = on_submit
+
+        # Create dialog content
+        self.dialog_content = MDBoxLayout(orientation="vertical", spacing=10, size_hint_y=None)
+        self.dialog_content.height = len(participants) * 60 + 20
+
+        scroll = ScrollView()
+        list_view = MDList()
+
+        # Add participant inputs or checkboxes
+        for uid, name in participants.items():
+            item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
+
+            if split_type == "Equally" or action == "Remove":
+                # For "Equally" or "Remove", use checkboxes only
+                checkbox = MDCheckbox(size_hint_x=0.1)
+                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
+                item.add_widget(checkbox)
+            else:
+                # For other split types, use input fields only
+                input_field = MDTextField(
+                    hint_text=self.get_hint_text(),
+                    size_hint_x=0.4,
+                    halign="center",
+                    pos_hint={"center_y": 0.5},  # Adjust alignment
+                )
+                item.add_widget(input_field)
+                self.selected_participants[uid] = {"selected": True, "value": input_field}
+
+            label = MDLabel(text=name, size_hint_x=0.6 if split_type != "Equally" else 0.9)
+            item.add_widget(label)
+
+            list_view.add_widget(item)
+
+        scroll.add_widget(list_view)
+        self.dialog_content.add_widget(scroll)
+
+        # Create dialog
+        self.dialog = MDDialog(
+            title=f"{self.action} Participants",
+            type="custom",
+            content_cls=self.dialog_content,
+            buttons=[
+                MDFlatButton(text="CANCEL", on_release=self.dismiss),
+                MDRaisedButton(text="OK", on_release=self.submit),
+            ],
+        )
+
+    def open(self):
+        """Open the dialog."""
+        self.dialog.open()
+
+    def dismiss(self, *args):
+        """Close the dialog."""
+        self.dialog.dismiss()
+
+    def toggle_selection(self, active, uid):
+        """Toggle participant selection."""
+        if active:
+            self.selected_participants[uid] = True
+        else:
+            self.selected_participants.pop(uid, None)
+
+    def submit(self, *args):
+        """Submit selected participants."""
+        self.on_submit(self.selected_participants)
+        self.dismiss()
+
+    def get_hint_text(self):
+        """Get hint text based on split type."""
+        if self.split_type == "Custom":
+            return "Amount"
+        elif self.split_type == "By Percentage":
+            return "Percentage"
+        elif self.split_type == "By Shares":
+            return "Shares"
+        return ""
 
 
 class AddRecurringBillScreen(Screen):

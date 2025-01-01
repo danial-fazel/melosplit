@@ -337,6 +337,14 @@
                 pos_hint: {"center_x": 0.5}
                 on_release: app.root.current = "graph_visualization_screen"
 
+            MDRaisedButton:
+                text: "Add Member"
+                on_release: root.open_add_member_dialog()
+            MDRaisedButton:
+                text: "Remove Member"
+                on_release: root.open_remove_member_dialog()
+
+
 <AddExpenseScreen>:
     name: "add_expense_screen"
 

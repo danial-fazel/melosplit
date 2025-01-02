@@ -377,6 +377,9 @@ class GroupScreen(Screen):
     def show_normal_transactions(self):
         """Display all transactions without categorization."""
         group_name = App.get_running_app().group_name
+        global the_group
+        members = the_group.members
+
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
         transactions = transaction_ref.get() or {}
 
@@ -384,9 +387,11 @@ class GroupScreen(Screen):
         transactions_history.clear_widgets()
 
         for transaction in reversed(list(transactions.values())):
+            uid = transaction.get('payer')
+            name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -399,6 +404,8 @@ class GroupScreen(Screen):
         group_name = App.get_running_app().group_name
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
         transactions = transaction_ref.get() or {}
+        global the_group
+        members = the_group.members
 
         # Categorize transactions
         categorized = {}
@@ -425,9 +432,11 @@ class GroupScreen(Screen):
             )
             # Add transactions under the category
             for transaction in reversed(transactions):
+                uid = transaction.get('payer')
+                name = members.get(uid, "Unknown Payer")
                 transactions_history.add_widget(
                     MDLabel(
-                        text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                        text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                         font_size=dp(14),
                         size_hint_y=None,
                         height=dp(30),
@@ -455,7 +464,9 @@ class GroupScreen(Screen):
             toast("Please select both start and end dates.")
             return
 
-        group_name = App.get_running_app().group_name
+        group_name = App.get_running_app().group_name        
+        global the_group
+        members = the_group.members
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
         transactions = transaction_ref.get() or {}
 
@@ -473,9 +484,11 @@ class GroupScreen(Screen):
         transactions_history = self.ids.transactions_history
         transactions_history.clear_widgets()
         for transaction in filtered:
+            uid = transaction.get('payer')
+            name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -494,6 +507,8 @@ class GroupScreen(Screen):
     def sort_transactions(self, criterion):
         """Sort transactions by the selected criterion."""
         group_name = App.get_running_app().group_name
+        global the_group
+        members = the_group.members
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
         transactions = transaction_ref.get() or {}
 
@@ -510,9 +525,11 @@ class GroupScreen(Screen):
         transactions_history = self.ids.transactions_history
         transactions_history.clear_widgets()
         for transaction in reversed(sorted_transactions):
+            uid = transaction.get('payer')
+            name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -520,15 +537,6 @@ class GroupScreen(Screen):
             )
 
         self.sort_menu.dismiss()
-
-    def members_summary(self):
-        pass
-
-    def add_expences(self):
-        pass
-
-    def settle_ups(Self):
-        pass
 
 
 class TransactionHistoryWidget(MDBoxLayout):
@@ -639,7 +647,7 @@ class MemberSummaryScreen(Screen):
 
         # Create the dialog content dynamically
         participants = {uid: name for uid, name in members.items()}
-        self.remove_member_dialog = ParticipantDialog2(participants, self.update_selected_members, "Remove")
+        self.remove_member_dialog = MembersDialog(participants, self.update_selected_members, "Remove")
         self.remove_member_dialog.open()
 
     def update_selected_members(self, selected_members):
@@ -666,9 +674,6 @@ class MemberSummaryScreen(Screen):
         toast("Selected members removed successfully.")
         self.remove_member_dialog.dismiss()
 
-
-
-        
     def go_back(self):
         """Navigate back to the GroupScreen."""
         self.manager.current = "group_screen"
@@ -706,6 +711,49 @@ class AddExpenseScreen(Screen):
         self.participants_dialog = None  # To manage the participants dialog
         self.selected_participants = set()
 
+    def open_payer_dropdown(self, button):
+        """Open a dropdown for selecting the payer."""
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
+        if not group_data or "members" not in group_data:
+            toast("No members available in this group.")
+            return
+
+        participants = group_data["members"]  # {uid: name} mapping
+
+        dropdown_items = [
+            {
+                "viewclass": "OneLineListItem",
+                "text": name,
+                "on_release": lambda x=uid: self.set_payer(x),
+            }
+            for uid, name in participants.items()
+        ]
+
+        self.payer_dropdown_menu = MDDropdownMenu(
+            items=dropdown_items,
+            width_mult=4,
+        )
+        if not self.payer_dropdown_menu.parent:
+            self.payer_dropdown_menu.caller = button
+            self.payer_dropdown_menu.open()
+
+    def set_payer(self, uid):
+        """Set the selected payer and update the UI."""
+        self.payer_dropdown_menu.dismiss()  # Close the dropdown menu
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        members = group_ref.child("members").get()
+
+        if members and uid in members:
+            self.selected_payer = uid  # Store the payer UID
+            # self.ids.payer_name.text = members[uid]  # Display the payer name in the UI
+        else:
+            toast("Invalid payer selected.")
+
+
     def open_split_type_menu(self, button):
         """Open split type menu safely."""
         if not self.split_type_menu.parent:
@@ -735,18 +783,27 @@ class AddExpenseScreen(Screen):
 
     def open_participant_dialog(self):
         """Open participant dialog with input fields based on split type."""
-        split_type = self.ids.split_type.text
-        group_name = App.get_running_app().group_name
-        group_ref = db.reference(f"groups/{group_name}")
+        split_type = self.ids.split_type.text  # Determine the split type
+        group_name = App.get_running_app().group_name  # Get the current group name
+        group_ref = db.reference(f"groups/{group_name}")  # Reference to the group in Firebase
         group_data = group_ref.get()
 
         if not group_data or "members" not in group_data:
             toast("No participants available in this group.")
             return
 
-        participants = group_data["members"]
-        self.dialog = ParticipantDialog(participants, self.update_selected_participants, split_type)
+        participants = group_data["members"]  # {uid: name} mapping
+
+        def on_submit(selected):
+            """Callback function to update the selected participants."""
+            self.selected_participants = selected  # Store selected UIDs and values
+            participant_names = [participants[uid] for uid in selected.keys()]  # Convert UIDs to names for display
+            self.ids.selected_participants_label.text = ", ".join(participant_names)  # Update UI with names
+
+        # Open the dialog with participants and submit callback
+        self.dialog = ParticipantDialog(participants, on_submit, split_type)
         self.dialog.open()
+
 
 
     def update_selected_participants(self, selected_participants):
@@ -761,7 +818,7 @@ class AddExpenseScreen(Screen):
 
     def add_expense(self):
         """Add expense using logic and save it to Firebase."""
-        payer = self.ids.payer_name.text.strip()
+        payer = self.selected_payer
         amount = self.ids.amount.text.strip()
         split_type = self.ids.split_type.text.strip()
         category = self.ids.category.text.strip()
@@ -844,7 +901,7 @@ class AddExpenseScreen(Screen):
 
     def clear_inputs(self):
         """Clear all input fields."""
-        self.ids.payer_name.text = ""
+        self.selected_payer = ""
         self.ids.amount.text = ""
         self.ids.split_type.text = ""
         self.ids.category.text = ""
@@ -866,13 +923,13 @@ from kivy.uix.scrollview import ScrollView
 class ParticipantDialog:
     def __init__(self, participants, on_submit, split_type="Equally"):
         """
-        :param participants: List of participant names.
+        :param participants: Dictionary of participant UIDs to names.
         :param on_submit: Callback function to handle selected participants.
         :param split_type: The split type (e.g., "Equally", "By Percentage", "By Shares", "Custom").
         """
-        self.participants = participants
+        self.participants = participants  # {uid: name}
         self.split_type = split_type
-        self.selected_participants = {}
+        self.selected_participants = {}  # Store selected participants as {uid: value}
         self.on_submit = on_submit
 
         # Create dialog content
@@ -887,12 +944,12 @@ class ParticipantDialog:
             item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
 
             if split_type == "Equally":
-                # For "Equally", use checkboxes only
+                # For "Equally", use checkboxes
                 checkbox = MDCheckbox(size_hint_x=0.1)
-                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(active, uid))
+                checkbox.bind(active=lambda _, active, uid=uid: self.toggle_selection(uid, active))
                 item.add_widget(checkbox)
             else:
-                # For other split types, use input fields only
+                # For other split types, use input fields
                 input_field = MDTextField(
                     hint_text=self.get_hint_text(),
                     size_hint_x=0.4,
@@ -929,22 +986,25 @@ class ParticipantDialog:
         """Close the dialog."""
         self.dialog.dismiss()
 
-    def toggle_selection(self, active, name):
+    def toggle_selection(self, uid, active):
         """Toggle participant selection."""
         if self.split_type == "Equally":
-            self.selected_participants[name] = {"selected": active}
+            if active:
+                self.selected_participants[uid] = 0  # Default value for equal split
+            else:
+                self.selected_participants.pop(uid, None)
 
     def submit(self, *args):
         """Submit selected participants and values."""
         if self.split_type == "Equally":
-            selected = {name: 0 for name, field in self.selected_participants.items() if field["selected"]}
+            selected = {uid: 0 for uid in self.selected_participants.keys()}  # Equal split
         else:
             selected = {
-                name: float(field["value"].text) if field["value"].text.strip() else 0
-                for name, field in self.selected_participants.items()
+                uid: float(field["value"].text) if field["value"].text.strip() else 0
+                for uid, field in self.selected_participants.items()
             }
 
-        self.on_submit(selected)
+        self.on_submit(selected)  # Callback with UIDs and values
         self.dismiss()
 
     def get_hint_text(self):
@@ -959,7 +1019,8 @@ class ParticipantDialog:
             return ""
 
 
-class ParticipantDialog2:
+
+class MembersDialog:
     def __init__(self, participants, on_submit, action="Select", split_type="Equally"):
         """
         :param participants: Dictionary of participant IDs and names.
@@ -1087,6 +1148,48 @@ class AddRecurringBillScreen(Screen):
         self.ids.split_type.text = split_type
         self.split_type_menu.dismiss()
 
+    def open_payer_dropdown(self, button):
+        """Open a dropdown for selecting the payer."""
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
+        if not group_data or "members" not in group_data:
+            toast("No members available in this group.")
+            return
+
+        participants = group_data["members"]  # {uid: name} mapping
+
+        dropdown_items = [
+            {
+                "viewclass": "OneLineListItem",
+                "text": name,
+                "on_release": lambda x=uid: self.set_payer(x),
+            }
+            for uid, name in participants.items()
+        ]
+
+        self.payer_dropdown_menu = MDDropdownMenu(
+            items=dropdown_items,
+            width_mult=4,
+        )
+        if not self.payer_dropdown_menu.parent:
+            self.payer_dropdown_menu.caller = button
+            self.payer_dropdown_menu.open()
+
+    def set_payer(self, uid):
+        """Set the selected payer and update the UI."""
+        self.payer_dropdown_menu.dismiss()  # Close the dropdown menu
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        members = group_ref.child("members").get()
+
+        if members and uid in members:
+            self.selected_payer = uid  # Store the payer UID
+            # self.ids.payer_name.text = members[uid]  # Display the payer name in the UI
+        else:
+            toast("Invalid payer selected.")
+
     def open_participant_dialog(self):
         """Open participant selection dialog."""
         group_name = App.get_running_app().group_name
@@ -1124,7 +1227,7 @@ class AddRecurringBillScreen(Screen):
 
     def add_recurring_bill(self):
         """Add recurring bill using logic and save it to Firebase."""
-        payer = self.ids.payer_name.text.strip()
+        payer = self.selected_payer
         amount = self.ids.amount.text.strip()
         split_type = self.ids.split_type.text.strip()
         frequency = self.ids.frequency.text.strip()
@@ -1211,7 +1314,7 @@ class AddRecurringBillScreen(Screen):
 
     def prefill_form(self, group_name, bill):
         """Pre-fill the form with recurring bill details."""
-        self.ids.payer_name.text = ", ".join(bill.payer if isinstance(bill.payer, list) else [bill.payer])
+        self.selected_payer = ", ".join(bill.payer if isinstance(bill.payer, list) else [bill.payer])
         self.ids.amount.text = str(bill.amount)
         self.ids.split_type.text = bill.split_type
         self.ids.frequency.text = bill.frequency
@@ -1229,10 +1332,10 @@ class SettleUpScreen(Screen):
         """Generate and display the settle-up transactions when the screen is opened."""
         global the_group
         group_graph = the_group.graph  # Always fetch the latest graph data
-
+        members = the_group.members
         # Get simplified transactions
         simplified_transactions = group_graph.minimize_cash_flow()
-
+        self.simplified_transactions = simplified_transactions
         # Display the transactions
         settle_up_list = self.ids.settle_up_list
         settle_up_list.clear_widgets()
@@ -1248,12 +1351,15 @@ class SettleUpScreen(Screen):
                 )
             )
         else:
-            for payer, payee, amount in simplified_transactions:
+            for payer_uid, payee_uid, amount in simplified_transactions:
+                print(simplified_transactions)
+                payer_name = members.get(payer_uid, "Unknown Payeer")
+                payee_name = members.get(payee_uid, "Unknown Payee")
                 # Add transaction details and button inline
                 item = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
                 item.add_widget(
                     MDLabel(
-                        text=f"{payer} owes {payee} {amount:.2f} USD",
+                        text=f"{payer_name} owes {payee_name} {amount:.2f} USD",
                         size_hint_x=0.7,
                     )
                 )
@@ -1261,45 +1367,70 @@ class SettleUpScreen(Screen):
                 settle_button = MDRaisedButton(
                     text="Settle Payment",
                     size_hint_x=0.3,
-                    on_release=lambda p=payer, py=payee, a=amount: self.settle_payment(p, py, a),
+                    on_release=lambda p=payer_uid, py=payee_uid, a=amount: self.settle_payment(p, py, a),
                 )
                 item.add_widget(settle_button)
                 settle_up_list.add_widget(item)
 
     def settle_payment(self, payer, payee, amount):
         """Navigate to the settle payment screen with transaction details."""
+        for payer_uid, payee_uid, amount in self.simplified_transactions:
+            payer = payer_uid
+            payee = payee_uid
+            amount = amount
         app = App.get_running_app()
-        app.payer = payer
-        app.payee = payee
-        app.amount = amount
         app.root.current = "settle_payment_screen"
 
-
+        settle_payment_screen = self.manager.get_screen("settle_payment_screen")
+        settle_payment_screen.prefill(payer, payee, amount)
+        
+        # Navigate to the "Add Recurring Bill" screen
+        self.manager.current = "settle_payment_screen"
 
 class SettlePaymentScreen(Screen):
+    def prefill(self, payer, payee, amount):
+        """Pre-fill the payment form with transaction details."""
+        self.payer = payer
+        self.payee = payee
+        self.amount= amount
+        app = App.get_running_app()
+        global the_group
+        members = the_group.members  # {uid: name}
+        payer_name = members.get(payer, "Unknown Payer")
+        payee_name = members.get(payee, "Unknown Payee")
+
+        self.ids.payer_name.text = payer_name
+        self.ids.payee_name.text = payee_name
+        self.ids.amount.text = f"{amount:.2f}"
+
     def confirm_payment(self):
         """Record the payment in the group graph and Firebase."""
-        payer = self.ids.payer_name.text.strip()
-        payee = self.ids.payee_name.text.strip()
+        app = App.get_running_app()
+        current_user = app.user_uid  # Assuming user_uid is stored in the app instance
+        payee_uid = self.payee
+
+        if current_user != payee_uid:
+            toast("Only the payee can confirm this payment.")
+            return
+
+        payer = self.payer
+        payee = payee_uid
         amount = self.ids.amount.text.strip()
 
         global the_group
-        group_graph = the_group.graph 
+        group_graph = the_group.graph
 
         if not payer or not payee or not amount:
             toast("All fields are required!")
             return
-
         try:
             amount = float(amount)
         except ValueError:
             toast("Invalid amount!")
             return
-
         # Update group graph
-        group_name = App.get_running_app().group_name
+        group_name = app.group_name
         group_graph.add_transaction(payer, payee, -amount)  # Negative amount to indicate payment
-
 
         # Record the payment in Firebase
         transaction_ref = db.reference(f"groups/{group_name}/transactions")
@@ -1313,6 +1444,7 @@ class SettlePaymentScreen(Screen):
 
         toast("Payment recorded successfully.")
         self.manager.current = "settle_up_screen"
+
 
 # from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
 # import matplotlib.pyplot as plt

@@ -356,9 +356,10 @@
         padding: dp(20)
         spacing: dp(10)
 
-        MDTextField:
-            id: payer_name
-            hint_text: "Payer Name"
+        MDFlatButton:
+            id: payer_dropdown
+            text: "Select Payer"
+            on_release: root.open_payer_dropdown(self)
 
         MDTextField:
             id: amount
@@ -427,9 +428,10 @@
         padding: dp(20)
         spacing: dp(10)
 
-        MDTextField:
-            id: payer_name
-            hint_text: "Payer Name"
+        MDFlatButton:
+            id: payer_dropdown
+            text: "Select Payer"
+            on_release: root.open_payer_dropdown(self)
 
         MDTextField:
             id: amount

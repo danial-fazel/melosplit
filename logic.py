@@ -110,7 +110,6 @@ class Bill:
     def update_next_due_date(self):
         """Update the next due date based on the frequency."""
         if not self.frequency:
-            print('One-time bill, no update needed')
             return  # One-time bill, no update needed
         #
         if self.frequency == "Monthly":
@@ -119,8 +118,6 @@ class Bill:
             self.next_due_date += timedelta(days=7)
         elif self.frequency == "Yearly":
             self.next_due_date += timedelta(days=365)
-
-        print(self.next_due_date)
 
 class Graph:
     def __init__(self, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##

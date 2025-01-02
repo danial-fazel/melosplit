@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import networkx as nx
 import matplotlib.pyplot as plt
-from melosplit.currency import convert_currency
+from currency import convert_currency
 
 
 
@@ -112,7 +112,7 @@ class Bill:
         Convert the bill amount to the target currency.
         """
         if self.currency != target_currency:
-            from melosplit.currency import convert_currency
+            # from melosplit.currency import convert_currency
             self.amount = convert_currency(self.amount, self.currency, target_currency)
             self.currency = target_currency
 

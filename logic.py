@@ -2,6 +2,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import networkx as nx
 import matplotlib.pyplot as plt
+from melosplit.currency import convert_currency
+
 
 
 # class Member:  ## 
@@ -46,7 +48,7 @@ class Group:
 
         # Remove the member
         del self.members[member]
-        # print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
+        print(f"Member '{self.members[member]}' has been removed and debts redistributed.")
 
     def get_summary(self):
         """
@@ -94,7 +96,7 @@ class Group:
         return self.graph.get_transaction_history(filter_by)
 
 class Bill:
-    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None,description=None, split_type=None):
+    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None, currency="usd_sell"):
         self.payer = payer
         self.amount = amount
         self.participants = participants  # List of participant names
@@ -103,24 +105,31 @@ class Bill:
             datetime.strptime(next_due_date, "%Y-%m-%d") if next_due_date else None
         )
         self.category = category  # Category of the expense (e.g., 'Food', 'Travel')
-        self.description = description
-        self.split_type = split_type
+        self.currency = currency
 
+    def convert_amount(self, target_currency):
+        """
+        Convert the bill amount to the target currency.
+        """
+        if self.currency != target_currency:
+            from melosplit.currency import convert_currency
+            self.amount = convert_currency(self.amount, self.currency, target_currency)
+            self.currency = target_currency
 
     def update_next_due_date(self):
         """Update the next due date based on the frequency."""
         if not self.frequency:
-            print('One-time bill, no update needed')
             return  # One-time bill, no update needed
-        #
-        if self.frequency == "Monthly":
-            self.next_due_date += timedelta(days=30)
-        elif self.frequency == "Weekly":
-            self.next_due_date += timedelta(days=7)
-        elif self.frequency == "Yearly":
-            self.next_due_date += timedelta(days=365)
 
-        print(self.next_due_date)
+        if self.frequency == "weekly":
+            self.next_due_date += timedelta(weeks=1)
+        elif self.frequency == "monthly":
+            self.next_due_date = self.next_due_date.replace(
+                month=self.next_due_date.month % 12 + 1
+            )
+        elif self.frequency == "yearly":
+            self.next_due_date = self.next_due_date.replace(year=self.next_due_date.year + 1)
+
 
 class Graph:
     def __init__(self, edges=defaultdict(lambda: defaultdict(float)), transactions=[], recurring_bills=[], category_totals=defaultdict(float)):  ##
@@ -137,7 +146,7 @@ class Graph:
             raise ValueError("Recurring bills must have a frequency and next_due_date.")
         self.recurring_bills.append(bill)
 
-    def process_recurring_bills(self, current_date, notify_user_callback):###
+    def process_recurring_bills(self, current_date):
         """
         Check and process all recurring bills due by the given date.
         """
@@ -145,11 +154,12 @@ class Graph:
         for bill in self.recurring_bills:
             if bill.next_due_date and bill.next_due_date <= current_date:
                 # Add the bill to the graph as a one-time bill
-                notify_user_callback(bill)###
+                self.add_bill(Bill(bill.payer, bill.amount, bill.participants))
                 # Update the next due date
                 bill.update_next_due_date()
 
-    def add_bill(self, bill, split_type="Equally", custom_splits=None):
+    def add_bill(self, bill, split_type="Equally", custom_splits=None, target_currency="usd_sell"):
+        bill.convert_amount(target_currency)  # Convert bill amount to target currency
         """
         Add a bill and log it in the transaction history.
         """
@@ -375,7 +385,10 @@ if __name__ == "__main__":
     bill3 = Bill(payer="Bob", amount=450, participants=["Bob", "Charlie", "Alice"], category="Food")
     group.add_bill(bill3, split_type="Equally")
 
-    print(group.members)
+    # Example
+    # amount_in_usd = convert_currency(100, "usd", "irtt")
+    # print(f"Converted amount: {amount_in_usd:.2f}")
+
 
     # print(group.get_transaction_history())
 
@@ -383,7 +396,7 @@ if __name__ == "__main__":
     # print(dict(dick))
 
     mcf = group.graph.minimize_cash_flow()
-    print(mcf)
+    # print(mcf)
 
     # # Get summary
     # summary = group.get_summary()

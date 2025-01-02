@@ -512,6 +512,11 @@
             text: str(app.amount)
             input_filter: "float"
 
+        MDTextField:
+            id: currency_field
+            hint_text: "Currency (e.g., IRTT)"
+            on_focus: root.open_currency_menu(self)
+
         MDRaisedButton:
             text: "Confirm Payment"
             on_release: root.confirm_payment()

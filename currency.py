@@ -14,14 +14,15 @@ def fetch_currency_data():
         for field in required_fields:
             value = data.get(field)
             if isinstance(value, dict) and "value" in value:  # Handle nested structure
-                currency_data[field] = float(value["value"])
+                currency_data[field] = float(value["value"]) / 1000
             elif isinstance(value, (int, float, str)) and value:  # Fallback for flat structure
-                currency_data[field] = float(value)
+                currency_data[field] = float(value) / 1000
             else:
                 currency_data[field] = None  # Handle missing data gracefully
 
         # Add fixed conversion for IRTT
-        currency_data["irtt"] = 1000.0  # Assume a fixed value for demonstration
+        currency_data["irtt"] = 1  # Assume a fixed value for demonstration
+        currency_data["usd"] = currency_data.pop("usd_sell")
         return currency_data
 
     except requests.exceptions.RequestException as e:
@@ -31,13 +32,20 @@ def fetch_currency_data():
         print(f"Data Processing Error: {e}")
         return None
 
-def convert_currency(amount, from_currency, to_currency):
+# testing:
+# print(fetch_currency_data())
+
+def convert_currency( amount, from_currency, info, to_currency):
     """
     Converts the given amount from one currency to another.
     """
-    currency_data = fetch_currency_data()
-    currency_data["irtt"] = "1000"
-    currency_data["usd"] = currency_data.pop("usd_sell")
+    if from_currency == to_currency:
+        return float(amount)
+
+    currency_data = info # fetch_currency_data()
+    # currency_data["irtt"] = "1000"
+
+    # print(currency_data)
 
     if not currency_data:
         raise ValueError("Failed to fetch currency data.")
@@ -50,17 +58,17 @@ def convert_currency(amount, from_currency, to_currency):
     base_rate_from = float(currency_data[from_currency])
     base_rate_to = float(currency_data[to_currency])
 
-    if not isinstance(base_rate_from, (int, float)) or not isinstance(base_rate_to, (int, float)):
-        raise ValueError("Currency rates must be numeric values.")
+    # if not isinstance(base_rate_from, (int, float)) or not isinstance(base_rate_to, (int, float)):
+    #     raise ValueError("Currency rates must be numeric values.")
 
     # Conversion logic
-    converted_amount = amount / base_rate_to * base_rate_from
+    converted_amount = (float(amount) / base_rate_to) * base_rate_from
 
     return converted_amount
 
 
 # print(f"{val:,}")
-
-# print(convert_currency(10, "usd", "irtt"))
+info = fetch_currency_data()
+print(convert_currency(10, "usd", info, "gbp"))
 #
 # fetch_currency_data()

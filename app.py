@@ -63,6 +63,7 @@ def local_loggedin():
 
 the_group = None  # Global variable to store the active Group instance
 
+chand = fetch_currency_data()
 
 def save_group_to_firebase():
     """Save the current the_group instance to Firebase."""
@@ -389,7 +390,7 @@ class GroupScreen(Screen):
         for transaction in reversed(list(transactions.values())):
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -429,7 +430,7 @@ class GroupScreen(Screen):
             for transaction in reversed(transactions):
                 transactions_history.add_widget(
                     MDLabel(
-                        text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                        text=f"{transaction.get('payer')} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                         font_size=dp(14),
                         size_hint_y=None,
                         height=dp(30),
@@ -477,7 +478,7 @@ class GroupScreen(Screen):
         for transaction in filtered:
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -514,7 +515,7 @@ class GroupScreen(Screen):
         for transaction in reversed(sorted_transactions):
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{transaction.get('payer')} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -629,7 +630,7 @@ class AddExpenseScreen(Screen):
         if self.currency_menu and self.currency_menu.parent:
             self.currency_menu.dismiss()  # Ensure the previous menu is dismissed
 
-        currencies = ["irtt", "usd", "eur", "gbp"]  # Example supported currencies
+        currencies = ["irtt", "usd", "eur", "gbp"]  # supported currencies
         menu_items = [
             {"text": currency.upper(), "on_release": lambda x=currency: self.set_currency(x)}
             for currency in currencies
@@ -720,20 +721,20 @@ class AddExpenseScreen(Screen):
 
         # Convert amount to default currency (IRTT)
         try:
-            converted_amount = convert_currency(amount, selected_currency, "irtt")
+            converted_amount = int(convert_currency(amount, selected_currency, chand, "irtt")) #TODO rond??
         except ValueError as e:
             toast(f"Currency conversion error: {str(e)}")
             return
         except TypeError as e:
+            # print(e)
             toast(f"Currency conversion type error: {str(e)}")
             return
 
 
-        toast(f"Expense added: {converted_amount} IRTT")
 
         # Convert amount to float
         try:
-            amount = float(amount)
+            amount = float(converted_amount)
         except ValueError:
             self.ids.error_label.text = "Invalid amount!"
             return
@@ -741,8 +742,8 @@ class AddExpenseScreen(Screen):
         # Prepare custom splits or percentages for specific modes
         custom_splits = self.selected_participants
 
-        if split_type == "By Shares" and sum(custom_splits.values()) <= 0:
-            self.ids.error_label.text = "Total shares must be greater than zero!"
+        if split_type == "By Shares" and (sum(custom_splits.values()) <= 0 or isinstance(sum(custom_splits.values()), int)):
+            self.ids.error_label.text = "Shares must be positive integers!"
             return
         if split_type == "By Percentage" and abs(sum(custom_splits.values()) - 100) > 0.01:
             self.ids.error_label.text = "Total percentage must equal 100!"
@@ -922,13 +923,6 @@ class AddRecurringBillScreen(Screen):
         self.selected_participants = {}
         self.currency_menu = None
         self.selected_currency = "irtt"  # Default currency
-        # AddCurrencyField in UI
-        # currency_field = MDTextField(
-        #     hint_text="Currency (e.g., IRTT)",
-        #     on_focus=self.open_currency_menu
-        # )
-        # self.ids.currency_field = currency_field
-        # self.add_widget(currency_field)
 
 
     def open_frequency_menu(self, instance):
@@ -1053,7 +1047,7 @@ class AddRecurringBillScreen(Screen):
 
         # Convert amount to default currency (IRTT)
         try:
-            converted_amount = convert_currency(amount, selected_currency, "irtt")
+            amount = convert_currency(amount, selected_currency, chand, "irtt") #TODO rond??
         except ValueError as e:
             toast(f"Currency conversion error: {str(e)}")
             return
@@ -1062,7 +1056,7 @@ class AddRecurringBillScreen(Screen):
             return
 
         # Use converted_amount for further processing
-        toast(f"Expense added: {converted_amount} IRTT")
+        # toast(f"Expense added: {converted_amount} IRTT")
 
         # Logic for saving to Firebase or app data structure...
 
@@ -1124,6 +1118,7 @@ from functools import partial
 
 
 class SettleUpScreen(Screen):
+
     def on_enter(self):
         """Generate and display the settle-up transactions when the screen is opened."""
         global the_group
@@ -1152,7 +1147,7 @@ class SettleUpScreen(Screen):
                 item = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
                 item.add_widget(
                     MDLabel(
-                        text=f"{payer} owes {payee} {amount:.2f} USD",
+                        text=f"{payer} owes {payee} {amount:.2f} thousand Tomans\n(or {convert_currency(amount, 'irtt', chand, 'usd'):.2f} USD/ {convert_currency(amount, 'irtt', chand, 'eur'):.2f} EUR/ {convert_currency(amount, 'irtt', chand, 'gbp'):.2f} GBP)",
                         size_hint_x=0.7,
                     )
                 )
@@ -1175,6 +1170,28 @@ class SettleUpScreen(Screen):
 
 
 class SettlePaymentScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.currency_menu = None
+        self.selected_currency = "irtt"
+
+    def open_currency_menu(self, instance):
+        if self.currency_menu and self.currency_menu.parent:
+            self.currency_menu.dismiss()  # Ensure the previous menu is dismissed
+
+        currencies = ["irtt", "usd", "eur", "gbp"]  # Example supported currencies
+        menu_items = [
+            {"text": currency.upper(), "on_release": lambda x=currency: self.set_currency(x)}
+            for currency in currencies
+        ]
+        self.currency_menu = MDDropdownMenu(caller=instance, items=menu_items, width_mult=4)
+        self.currency_menu.open()
+
+    def set_currency(self, currency):
+        self.selected_currency = currency
+        self.ids.currency_field.text = currency.upper()
+        self.currency_menu.dismiss()
+
     def confirm_payment(self):
         """Record the payment in the group graph and Firebase."""
         payer = self.ids.payer_name.text.strip()
@@ -1189,7 +1206,7 @@ class SettlePaymentScreen(Screen):
             return
 
         try:
-            amount = float(amount)
+            amount = int(convert_currency(float(amount), self.selected_currency, chand, 'irtt')) #TODO rond??
         except ValueError:
             toast("Invalid amount!")
             return

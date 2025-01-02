@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import networkx as nx
 import matplotlib.pyplot as plt
-from currency import convert_currency
+# from currency import convert_currency
 
 
 
@@ -96,7 +96,7 @@ class Group:
         return self.graph.get_transaction_history(filter_by)
 
 class Bill:
-    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None, currency="usd_sell"):
+    def __init__(self, payer, amount, participants, frequency=None, next_due_date=None, category=None):
         self.payer = payer
         self.amount = amount
         self.participants = participants  # List of participant names
@@ -105,16 +105,16 @@ class Bill:
             datetime.strptime(next_due_date, "%Y-%m-%d") if next_due_date else None
         )
         self.category = category  # Category of the expense (e.g., 'Food', 'Travel')
-        self.currency = currency
+        # self.currency = currency
 
-    def convert_amount(self, target_currency):
-        """
-        Convert the bill amount to the target currency.
-        """
-        if self.currency != target_currency:
-            # from melosplit.currency import convert_currency
-            self.amount = convert_currency(self.amount, self.currency, target_currency)
-            self.currency = target_currency
+    # def convert_amount(self, target_currency):
+    #     """
+    #     Convert the bill amount to the target currency.
+    #     """
+    #     if self.currency != target_currency:
+    #         # from melosplit.currency import convert_currency
+    #         self.amount = convert_currency(self.amount, self.currency, target_currency)
+    #         self.currency = target_currency
 
     def update_next_due_date(self):
         """Update the next due date based on the frequency."""
@@ -158,8 +158,8 @@ class Graph:
                 # Update the next due date
                 bill.update_next_due_date()
 
-    def add_bill(self, bill, split_type="Equally", custom_splits=None, target_currency="usd_sell"):
-        bill.convert_amount(target_currency)  # Convert bill amount to target currency
+    def add_bill(self, bill, split_type="Equally", custom_splits=None):
+        # bill.convert_amount(target_currency)  # Convert bill amount to target currency
         """
         Add a bill and log it in the transaction history.
         """

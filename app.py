@@ -1359,7 +1359,7 @@ class SettleUpScreen(Screen):
                 item = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
                 item.add_widget(
                     MDLabel(
-                        text=f"{payer_name} owes {payee_name} {amount:.2f} USD",
+                        text=f"{payee_name} owes {payer_name} {amount:.2f} USD",
                         size_hint_x=0.7,
                     )
                 )
@@ -1409,7 +1409,7 @@ class SettlePaymentScreen(Screen):
         current_user = app.user_uid  # Assuming user_uid is stored in the app instance
         payee_uid = self.payee
 
-        if current_user != payee_uid:
+        if current_user != self.payer:
             toast("Only the payee can confirm this payment.")
             return
 

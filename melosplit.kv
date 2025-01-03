@@ -367,6 +367,11 @@
             input_filter: "float"
 
         MDTextField:
+            id: currency_field
+            hint_text: "Currency (e.g., IRTT)"
+            on_focus: root.open_currency_menu(self)
+
+        MDTextField:
             id: split_type
             hint_text: "Split Type"
             on_focus: root.open_split_type_menu(self)
@@ -437,6 +442,11 @@
             id: amount
             hint_text: "Amount"
             input_filter: "float"
+
+        MDTextField:
+            id: currency_field
+            hint_text: "Currency (e.g., IRTT)"
+            on_focus: root.open_currency_menu(self)
 
         MDTextField:
             id: split_type
@@ -522,6 +532,11 @@
             hint_text: "Amount"
             text: str(app.amount)
             input_filter: "float"
+
+        MDTextField:
+            id: currency_field
+            hint_text: "Currency (e.g., IRTT)"
+            on_focus: root.open_currency_menu(self)
 
         MDRaisedButton:
             text: "Confirm Payment"

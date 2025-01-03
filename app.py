@@ -21,6 +21,7 @@ from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.pickers import MDDatePicker
 from collections import defaultdict
 import networkx as nx
+from currency import *
 
 
 # Firebase imports
@@ -59,6 +60,7 @@ def local_loggedin():
     pass 
 
 the_group = None  # Global variable to store the active Group instance
+chand = fetch_currency_data()
 
 def save_group_to_firebase():
     """Save the current the_group instance to Firebase."""
@@ -391,7 +393,7 @@ class GroupScreen(Screen):
             name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -436,7 +438,7 @@ class GroupScreen(Screen):
                 name = members.get(uid, "Unknown Payer")
                 transactions_history.add_widget(
                     MDLabel(
-                        text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                        text=f"{name} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                         font_size=dp(14),
                         size_hint_y=None,
                         height=dp(30),
@@ -488,7 +490,7 @@ class GroupScreen(Screen):
             name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -529,7 +531,7 @@ class GroupScreen(Screen):
             name = members.get(uid, "Unknown Payer")
             transactions_history.add_widget(
                 MDLabel(
-                    text=f"{name} paid {transaction.get('amount')} USD for {transaction.get('description', 'No description')} on {transaction.get('date')}",
+                    text=f"{name} paid {transaction.get('amount')} thousand Tomans for {transaction.get('description', 'No description')} on {transaction.get('date')}",
                     font_size=dp(14),
                     size_hint_y=None,
                     height=dp(30),
@@ -690,6 +692,8 @@ class MemberSummaryScreen(Screen):
 class AddExpenseScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.currency_menu = None
+        self.selected_currency = "irtt"  # Default currency
 
         self.split_type_items = [
             {"text": "Equally", "viewclass": "OneLineListItem", "on_release": lambda x="Equally": self.set_split_type(x)},
@@ -752,6 +756,23 @@ class AddExpenseScreen(Screen):
             # self.ids.payer_name.text = members[uid]  # Display the payer name in the UI
         else:
             toast("Invalid payer selected.")
+
+    def open_currency_menu(self, instance):
+        if self.currency_menu and self.currency_menu.parent:
+            self.currency_menu.dismiss()  # Ensure the previous menu is dismissed
+
+        currencies = ["irtt", "usd", "eur", "gbp"]  # supported currencies
+        menu_items = [
+            {"text": currency.upper(), "on_release": lambda x=currency: self.set_currency(x)}
+            for currency in currencies
+        ]
+        self.currency_menu = MDDropdownMenu(caller=instance, items=menu_items, width_mult=4)
+        self.currency_menu.open()
+
+    def set_currency(self, currency):
+        self.selected_currency = currency
+        self.ids.currency_field.text = currency.upper()
+        self.currency_menu.dismiss()
 
 
     def open_split_type_menu(self, button):
@@ -823,6 +844,7 @@ class AddExpenseScreen(Screen):
         split_type = self.ids.split_type.text.strip()
         category = self.ids.category.text.strip()
         description = self.ids.description.text.strip()
+        selected_currency = self.selected_currency
 
         if not payer or not amount or not split_type or not category:
             self.ids.error_label.text = "All fields except description are required!"
@@ -832,9 +854,20 @@ class AddExpenseScreen(Screen):
             self.ids.error_label.text = "At least one participant must be selected!"
             return
 
+        # Convert amount to default currency (IRTT)
+        try:
+            converted_amount = int(convert_currency(amount, selected_currency, chand, "irtt")) #TODO rond??
+        except ValueError as e:
+            toast(f"Currency conversion error: {str(e)}")
+            return
+        except TypeError as e:
+            # print(e)
+            toast(f"Currency conversion type error: {str(e)}")
+            return
+
         # Convert amount to float
         try:
-            amount = float(amount)
+            amount = float(converted_amount)
         except ValueError:
             self.ids.error_label.text = "Invalid amount!"
             return
@@ -842,8 +875,8 @@ class AddExpenseScreen(Screen):
         # Prepare custom splits or percentages for specific modes
         custom_splits = self.selected_participants
 
-        if split_type == "By Shares" and sum(custom_splits.values()) <= 0:
-            self.ids.error_label.text = "Total shares must be greater than zero!"
+        if split_type == "By Shares" and (sum(custom_splits.values()) <= 0 or isinstance(sum(custom_splits.values()), int)):
+            self.ids.error_label.text = "Shares must be positive integers!"
             return
         if split_type == "By Percentage" and abs(sum(custom_splits.values()) - 100) > 0.01:
             self.ids.error_label.text = "Total percentage must equal 100!"
@@ -1116,6 +1149,8 @@ class AddRecurringBillScreen(Screen):
         super().__init__(**kwargs)
         self.next_due_date = None
         self.selected_participants = {}
+        self.currency_menu = None
+        self.selected_currency = "irtt"  # Default currency
 
     def open_frequency_menu(self, instance):
         """Open dropdown for frequency selection."""
@@ -1132,6 +1167,22 @@ class AddRecurringBillScreen(Screen):
         self.ids.frequency.text = frequency
         self.frequency_menu.dismiss()
 
+    def open_currency_menu(self, instance):
+        if self.currency_menu and self.currency_menu.parent:
+            self.currency_menu.dismiss()  # Ensure the previous menu is dismissed
+
+        currencies = ["irtt", "usd", "eur", "gbp"]  # Example supported currencies
+        menu_items = [
+            {"text": currency.upper(), "on_release": lambda x=currency: self.set_currency(x)}
+            for currency in currencies
+        ]
+        self.currency_menu = MDDropdownMenu(caller=instance, items=menu_items, width_mult=4)
+        self.currency_menu.open()
+
+    def set_currency(self, currency):
+        self.selected_currency = currency
+        self.ids.currency_field.text = currency.upper()
+        self.currency_menu.dismiss()
     def open_split_type_menu(self, instance):
         """Open dropdown for split type selection."""
         menu_items = [
@@ -1232,6 +1283,7 @@ class AddRecurringBillScreen(Screen):
         split_type = self.ids.split_type.text.strip()
         frequency = self.ids.frequency.text.strip()
         description = self.ids.description.text.strip()
+        selected_currency = self.selected_currency
 
         if not payer or not amount or not split_type or not frequency or not self.next_due_date:
             toast("Please fill in all required fields.")
@@ -1260,6 +1312,23 @@ class AddRecurringBillScreen(Screen):
             self.ids.error_label.text = "Custom amounts must sum to the total amount!"
             return
         
+
+        # Convert amount to default currency (IRTT)
+        try:
+            amount = convert_currency(amount, selected_currency, chand, "irtt") #TODO rond??
+        except ValueError as e:
+            toast(f"Currency conversion error: {str(e)}")
+            return
+        except TypeError as e:
+            toast(f"Currency conversion type error: {str(e)}")
+            return
+
+        # Use converted_amount for further processing
+        # toast(f"Expense added: {converted_amount} IRTT")
+
+        # Logic for saving to Firebase or app data structure...
+
+
         # Initialize or load the group graph
         global the_group
         group_name = App.get_running_app().group_name
@@ -1359,7 +1428,7 @@ class SettleUpScreen(Screen):
                 item = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(10))
                 item.add_widget(
                     MDLabel(
-                        text=f"{payee_name} owes {payer_name} {amount:.2f} USD",
+                        text=f"{payee_name} owes {payer_name} {amount:.2f} thousand Tomans\n(or {convert_currency(amount, 'irtt', chand, 'usd'):.2f} USD/ {convert_currency(amount, 'irtt', chand, 'eur'):.2f} EUR/ {convert_currency(amount, 'irtt', chand, 'gbp'):.2f} GBP)",
                         size_hint_x=0.7,
                     )
                 )
@@ -1388,6 +1457,29 @@ class SettleUpScreen(Screen):
         self.manager.current = "settle_payment_screen"
 
 class SettlePaymentScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.currency_menu = None
+        self.selected_currency = "irtt"
+
+    def open_currency_menu(self, instance):
+        if self.currency_menu and self.currency_menu.parent:
+            self.currency_menu.dismiss()  # Ensure the previous menu is dismissed
+
+        currencies = ["irtt", "usd", "eur", "gbp"]  # Example supported currencies
+        menu_items = [
+            {"text": currency.upper(), "on_release": lambda x=currency: self.set_currency(x)}
+            for currency in currencies
+        ]
+        self.currency_menu = MDDropdownMenu(caller=instance, items=menu_items, width_mult=4)
+        self.currency_menu.open()
+
+    def set_currency(self, currency):
+        self.selected_currency = currency
+        self.ids.currency_field.text = currency.upper()
+        self.currency_menu.dismiss()
+
+
     def prefill(self, payer, payee, amount):
         """Pre-fill the payment form with transaction details."""
         self.payer = payer
@@ -1424,7 +1516,7 @@ class SettlePaymentScreen(Screen):
             toast("All fields are required!")
             return
         try:
-            amount = float(amount)
+            amount = int(convert_currency(float(amount), self.selected_currency, chand, 'irtt')) #TODO rond??
         except ValueError:
             toast("Invalid amount!")
             return

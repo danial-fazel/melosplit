@@ -202,15 +202,15 @@
                 text: "Select End Date"
                 on_release: root.open_date_picker("end")
 
+            MDRaisedButton:
+                text: "Filter Timeline"
+                on_release: root.filter_transactions_by_timeline()
+
         BoxLayout:
             orientation: "horizontal"
             size_hint_y: None
             height: dp(56)
             spacing: 10
-
-            MDRaisedButton:
-                text: "Filter Timeline"
-                on_release: root.filter_transactions_by_timeline()
 
             MDRaisedButton:
                 id: toggle_view_button
@@ -230,6 +230,10 @@
             size_hint_y: None
             height: dp(56)
             spacing: 10
+            
+            MDRaisedButton:
+                text: "Back"
+                on_release: root.manager.current = "group_manager"
 
             MDRaisedButton:
                 text: "Member Summary"
@@ -247,9 +251,6 @@
                 text: "Settle Up"
                 on_release: app.root.current = "settle_up_screen"
 
-            MDRaisedButton:
-                text: "Back"
-                on_release: root.manager.current = "group_manager"
 
 
 <TransactionHistoryWidget@BoxLayout>:
@@ -551,6 +552,11 @@
     BoxLayout:
         orientation: "vertical"
         id: graph_container
+        Image:
+            id: graph_image
+            source: "graph_image.png"  # Replace with your image file name
+            allow_stretch: True
+            keep_ratio: True
         BoxLayout:
             size_hint_y: None
             height: "50dp"
@@ -561,6 +567,7 @@
                 size_hint: None, None
                 size: "100dp", "40dp"
                 on_release: app.root.current = "member_summary_screen"
+
 
 <UserProfileScreen>:
     name: "user_profile_screen"

@@ -323,35 +323,80 @@ class Graph:
 
         return settle_debts(net_balances)
     
-    def generate_networkx_graph(self):
+    # def generate_networkx_graph(self):
+    #     """
+    #     Generate a NetworkX graph object from the current graph data.
+    #     Returns:
+    #         G (networkx.DiGraph): A directed graph representing the debts.
+    #     """
+    #     G = nx.DiGraph()
+    #     for payer, payees in self.edges.items():
+    #         for payee, amount in payees.items():
+    #             G.add_edge(payer, payee, weight=amount)
+    #     return G
+
+    def visualize_graph(self, group_name):
         """
-        Generate a NetworkX graph object from the current graph data.
-        Returns:
-            G (networkx.DiGraph): A directed graph representing the debts.
+        Visualize the debt graph using Matplotlib and NetworkX
+        And save its figure as 'graph.png'.
         """
+        # import matplotlib.pyplot as plt
+        # import networkx as nx
+        # from collections import defaultdict
+
         G = nx.DiGraph()
-        for payer, payees in self.edges.items():
-            for payee, amount in payees.items():
-                G.add_edge(payer, payee, weight=amount)
-        return G
 
-    def visualize_graph(self):
-        """
-        Visualize the debt graph using Matplotlib and NetworkX.
-        """
-        G = self.generate_networkx_graph()
+        # edges = {
+        # 'dnialfa83': defaultdict(float, {'amgh41213831': 70.0, 'sinaplus': 70.0}),
+        # 'emadmohamadi': defaultdict(float, {'amgh41213831': 848.5, 'dnialfa83': 40.0, 'sinaplus': 40.0}),
+        # 'amgh41213831': defaultdict(float, {'dnialfa83': 200.0, 'emadmohamadi': 200.0, 'sinaplus': 200.0}),
+        # 'sinaplus': defaultdict(float, {'amgh41213831': 5.0, 'dnialfa83': 10.0, 'emadmohamadi': 10.0}),
+        #         }
 
-        # Set up layout and labels
-        pos = nx.spring_layout(G)  # Layout algorithm
-        edge_labels = nx.get_edge_attributes(G, 'weight')
+        edges = dict(self.edges)
 
-        # Draw the graph
-        nx.draw(G, pos, with_labels=True, node_color="lightblue", node_size=2000, font_size=10, font_weight="bold")
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+        edge_list = []
+        for node1, edgesss in edges.items():
+            for node2, weight in edgesss.items():
+                edge_list.append((node1, node2, {'w': int(weight)}))
 
-        # Show the plot
-        plt.title("Debt Graph")
-        plt.show()
+
+        G.add_edges_from(edge_list)
+        pos = nx.circular_layout(G)
+        plt.figure(figsize=(16, 12))
+        fig, ax = plt.subplots()
+
+        out_degree_centrality = {node: G.out_degree(node) for node in G.nodes}
+        max_out_degree = max(out_degree_centrality.values())
+        node_sizes = [(out_degree_centrality[node] * 3000 / max_out_degree) + 100 for node in G.nodes]
+
+        nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='lightblue', alpha=0.5)
+
+        nx.draw_networkx_labels(G, pos, font_size=8)
+        # fig.savefig("first.png", bbox_inches='tight', pad_inches=0)
+
+
+        # Mohemtarin tikke:
+        curved_edges = [edge for edge in G.edges() if reversed(edge) in G.edges()]
+        straight_edges = list(set(G.edges()) - set(curved_edges))
+        nx.draw_networkx_edges(G, pos, edgelist=straight_edges, edge_color='gray')
+        arc_rad = 0.15
+        nx.draw_networkx_edges(G, pos, edgelist=curved_edges,
+                            connectionstyle=f'arc3, rad = {arc_rad}', edge_color='gray')
+        # fig.savefig("2.png", bbox_inches='tight', pad_inches=0)
+
+
+        import my_networkx as my_nx
+        edge_weights = nx.get_edge_attributes(G, 'w')
+        curved_edge_labels = {edge: edge_weights[edge] for edge in curved_edges}
+        straight_edge_labels = {edge: edge_weights[edge] for edge in straight_edges}
+        my_nx.my_draw_networkx_edge_labels(G, pos,
+                                        edge_labels=curved_edge_labels, rotate=True,
+                                        rad=arc_rad, font_size=8, font_color='darkblue')
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=straight_edge_labels,
+                                    rotate=True, font_size=8, font_color='darkblue')
+        plt.title(f"Group: {group_name}")
+        fig.savefig("graph.png", bbox_inches='tight', pad_inches=1, dpi=150)
 
 if __name__ == "__main__":
     # Create a group

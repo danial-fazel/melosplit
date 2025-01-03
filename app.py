@@ -1562,19 +1562,12 @@ class GraphVisualizationScreen(Screen):
     def on_enter(self):
         """Render the graph when the screen is displayed."""
         global the_group  # Access the global group data
-        group_graph = the_group.graph  # Get the group's graph
-        group_graph.visualize_graph()
+        the_group.graph.visualize_graph(the_group.name)
+        image_widget = self.ids.graph_image
+        image_widget.source = "graph.png"  # Update this path dynamically if needed
+        image_widget.reload()  # Force reload of the image
 
-        # # Generate the NetworkX graph and plot it
-        # nx_graph = group_graph.generate_networkx_graph()
-        # fig, ax = plt.subplots()
-        # pos = nx.spring_layout(nx_graph)
-        # nx.draw(nx_graph, pos, with_labels=True, ax=ax)
 
-        # # Embed the graph into Kivy
-        # canvas = FigureCanvasKivyAgg(fig)
-        # self.ids.graph_container.clear_widgets()  # Ensure the container is empty
-        # self.ids.graph_container.add_widget(canvas)
 
 
 class UserProfileScreen(Screen):

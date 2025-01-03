@@ -577,7 +577,7 @@
         # Display the user's net balance
         MDLabel:
             id: net_balance_label
-            text: "Net Balance: 0.00 USD"
+            text: "loading your net balance"
             theme_text_color: "Primary"
             halign: "center"
 
@@ -590,6 +590,9 @@
         MDRaisedButton:
             text: "Back to Group Manager"
             on_release: app.root.current = "group_manager"
+        MDRaisedButton:
+            text: "log out"
+            on_release: root.logout()
 
 <NotificationScreen>:
     name: "notifications"

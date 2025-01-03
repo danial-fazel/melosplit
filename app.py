@@ -22,6 +22,8 @@ from kivymd.uix.pickers import MDDatePicker
 from collections import defaultdict
 import networkx as nx
 from currency import *
+import json
+import os
 
 
 # Firebase imports
@@ -91,11 +93,11 @@ class LoginScreen(MDScreen):
     def login(self):
         email = self.ids.email_input.text.strip()
         password = self.ids.password_input.text.strip()
-        
+
         # Convert email to a safe key
-        at_sign = email.find('@') ##
+        at_sign = email.find('@')
         safe_email = email[:at_sign]
-        safe_email = re.sub(r'[.#$/\[\]]', '_', safe_email) # Replace special characters with underscore
+        safe_email = re.sub(r'[.#$/\[\]]', '_', safe_email)
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -106,11 +108,21 @@ class LoginScreen(MDScreen):
         user_data = user_ref.get()
 
         if user_data and user_data.get("password") == password:
-            App.get_running_app().user_email = email  ##
+            App.get_running_app().user_email = email
             App.get_running_app().user_uid = safe_email  # Store UID for future use
+
+            # Save session locally
+            self.save_user_session(safe_email, email)
+
             App.get_running_app().root.current = "group_manager"
         else:
             self.show_error("Invalid email or password.")
+
+    def save_user_session(self, user_uid, user_email):
+        """Save the logged-in user's session locally."""
+        session_data = {"user_uid": user_uid, "user_email": user_email}
+        with open("user_session.json", "w") as session_file:
+            json.dump(session_data, session_file)
 
     def show_error(self, message):
         dialog = MDDialog(title="Error", text=message, buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
@@ -122,10 +134,10 @@ class SignupScreen(MDScreen):
         email = self.ids.email_input.text.strip()
         password = self.ids.password_input.text.strip()
 
-        # # Convert email to a safe key
-        at_sign = email.find('@') ##
-        email = email[:at_sign]
-        safe_email = re.sub(r'[.#$/\[\]]', '_', email)
+        # Convert email to a safe key
+        at_sign = email.find('@')
+        safe_email = email[:at_sign]
+        safe_email = re.sub(r'[.#$/\[\]]', '_', safe_email)
 
         if not email or not password:
             self.show_error("Please fill in all fields.")
@@ -143,9 +155,19 @@ class SignupScreen(MDScreen):
             "password": password,
         })
 
-        App.get_running_app().user_email = email  ##
+        App.get_running_app().user_email = email
         App.get_running_app().user_uid = safe_email
+
+        # Save session locally
+        self.save_user_session(safe_email, email)
+
         App.get_running_app().root.current = "group_manager"
+
+    def save_user_session(self, user_uid, user_email):
+        """Save the signed-up user's session locally."""
+        session_data = {"user_uid": user_uid, "user_email": user_email}
+        with open("user_session.json", "w") as session_file:
+            json.dump(session_data, session_file)
 
     def show_error(self, message):
         dialog = MDDialog(title="Error", text=message, buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
@@ -1421,7 +1443,6 @@ class SettleUpScreen(Screen):
             )
         else:
             for payer_uid, payee_uid, amount in simplified_transactions:
-                print(simplified_transactions)
                 payer_name = members.get(payer_uid, "Unknown Payeer")
                 payee_name = members.get(payee_uid, "Unknown Payee")
                 # Add transaction details and button inline
@@ -1436,17 +1457,13 @@ class SettleUpScreen(Screen):
                 settle_button = MDRaisedButton(
                     text="Settle Payment",
                     size_hint_x=0.3,
-                    on_release=lambda p=payer_uid, py=payee_uid, a=amount: self.settle_payment(p, py, a),
+                    on_release=lambda btn,p=payer_uid, py=payee_uid, a=amount: self.settle_payment(p, py, a),
                 )
                 item.add_widget(settle_button)
                 settle_up_list.add_widget(item)
 
     def settle_payment(self, payer, payee, amount):
         """Navigate to the settle payment screen with transaction details."""
-        for payer_uid, payee_uid, amount in self.simplified_transactions:
-            payer = payer_uid
-            payee = payee_uid
-            amount = amount
         app = App.get_running_app()
         app.root.current = "settle_payment_screen"
 
@@ -1587,10 +1604,16 @@ class UserProfileScreen(Screen):
             graph = Graph(edges)
             group_balances = graph.calculate_balances()
             total_balance += group_balances.get(user_uid, 0.0)
-
+        amount = total_balance
         # Update the label in the UI
-        self.ids.net_balance_label.text = f"Your Net Balance in overal: {total_balance:.2f} USD"
-
+        self.ids.net_balance_label.text = f"Your Net Balance in overal: {total_balance:.2f} thousand Tomans\n(or {convert_currency(amount, 'irtt', chand, 'usd'):.2f} USD/ {convert_currency(amount, 'irtt', chand, 'eur'):.2f} EUR/ {convert_currency(amount, 'irtt', chand, 'gbp'):.2f} GBP)"
+    
+    def logout(self):
+        """Log out the current user and clear the session."""
+        app = App.get_running_app()
+        app.clear_user_session()
+        toast("Logged out successfully.")
+        self.manager.current = "login"
 
 class NotificationScreen(Screen):
     def __init__(self, **kwargs):
@@ -1788,10 +1811,44 @@ class MeloSplit(MDApp):
         self.payee = ""
         self.amount = 0
 
-
     def build(self):
-        self.theme_cls.primary_palette = "Blue"
-        return MyScreenManager()
+        self.user_uid = None  # Initialize user UID
+        self.user_email = None  # Initialize user email
+        root = MyScreenManager()  # Initialize root first
+        self.root = root  # Assign the root widget to the app
+        self.check_saved_session()  # Check session after root initialization
+        return root
+
+
+    def check_saved_session(self):
+        """Check for a saved session and auto-login the user if valid."""
+        if os.path.exists("user_session.json"):
+            with open("user_session.json", "r") as session_file:
+                session_data = json.load(session_file)
+                self.user_uid = session_data.get("user_uid")
+                self.user_email = session_data.get("user_email")
+
+                # Verify user exists in Firebase
+                user_ref = db.reference(f"/users/{self.user_uid}")
+                if user_ref.get():
+                    toast(f"Welcome back, {self.user_email}!")
+                    self.root.current = "group_manager"  # Navigate to the main screen
+                else:
+                    # Invalid session, clear it
+                    self.clear_user_session()
+                    self.root.current = "login"  # Navigate to login screen
+        else:
+            # No session file exists, navigate to login screen
+            self.root.current = "login"
+
+
+    def clear_user_session(self):
+        """Clear the saved user session and navigate to login."""
+        if os.path.exists("user_session.json"):
+            os.remove("user_session.json")
+
+        self.user_uid = None
+        self.user_email = None
 
 if __name__ == "__main__":
     MeloSplit().run()

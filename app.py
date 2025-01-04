@@ -24,18 +24,19 @@ import networkx as nx
 from currency import *
 import json
 import os
-
-
+from ai import AIService
 # Firebase imports
 import firebase_admin
 from firebase_admin import credentials, db
-
 # Initialize Firebase
 cred = credentials.Certificate("melosplit-firebase.json")
 firebase_admin.initialize_app(cred, {
     "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
 })
 
+# Initialize the AI service with our API key
+# ai_service = AIService(api_key="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")
+ai_service = AIService(api_key="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")
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')
     email = email[:at_sign]
@@ -80,8 +81,8 @@ def save_group_to_firebase():
     group_ref = db.reference(f"groups/{the_group.name}")
     group_ref.update({
         "members": the_group.members or {},
-        "category": "",
-        "description": the_group.get_category(),
+        "category": the_group.get_category(),
+        "description": the_group.discript(),
         "edges": edges_dict or {},
         # "transactions": the_group.graph.transactions or [],
         "recurring_bills": list(the_group.graph.recurring_bills),
@@ -260,11 +261,33 @@ class GroupManagerScreen(Screen):
 
 
 class AddGroupScreen(Screen):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.category_items = [
+            {"text": "Food", "viewclass": "OneLineListItem", "on_release": lambda x="Food": self.set_category(x)},
+            {"text": "Transport", "viewclass": "OneLineListItem", "on_release": lambda x="Transport": self.set_category(x)},
+            {"text": "Utilities", "viewclass": "OneLineListItem", "on_release": lambda x="Utilities": self.set_category(x)},
+            {"text": "Miscellaneous", "viewclass": "OneLineListItem", "on_release": lambda x="Miscellaneous": self.set_category(x)},
+        ]
+
+        self.category_items_menu = MDDropdownMenu(items=self.category_items, width_mult=4)
+
+    def open_category_menu(self, button):
+        """Open category menu safely."""
+        if not self.category_items_menu.parent:
+            self.category_items_menu.caller = button
+            self.category_items_menu.open()
+
+    def set_category(self, value):
+        self.ids.category_input.text = value
+        self.category_items_menu.dismiss()
+
     def next_step(self):
         """Validate group name and number of members, then navigate to member input screen."""
         group_name = self.ids.group_name_input.text.strip()
         num_members = self.ids.num_members_input.text.strip()
         description = self.ids.description_input.text.strip()
+        category = self.ids.category_input.text.strip()
 
         if not group_name:
             toast("Please enter a group name.")
@@ -281,6 +304,7 @@ class AddGroupScreen(Screen):
         global the_group
         the_group = Group(group_name)
         the_group.discript(description)
+        the_group.get_category(category)
         self.manager.current = "member_inputs_screen"
 
 
@@ -342,7 +366,7 @@ class MemberInputsScreen(Screen):
         group_ref = db.reference(f"groups/{group_name}")
         members_data = {
             "members": {m["uid"] or m["name"]: m["name"] for m in members},
-        }
+        }#TODO: mark the fake uids
         group_ref.set(members_data)
 
         # Add the group to the user's groups;
@@ -561,7 +585,65 @@ class GroupScreen(Screen):
             )
 
         self.sort_menu.dismiss()
+    def generate_story(self):
+        """Open a dialog to let the user choose a genre and then generate a story."""
+        genres = ["Scary", "Funny", "Mysterious", "Mixed", "Random"]
 
+        # Create a dialog with buttons for each genre
+        genre_buttons = [
+            MDRaisedButton(
+                text=genre,
+                on_release=lambda btn,x=genre: self.on_genre_selected(x)
+            )
+            for genre in genres
+        ]
+
+        self.genre_dialog = MDDialog(
+            title="Choose a Story Genre",
+            type="custom",
+            buttons=genre_buttons,
+        )
+        self.genre_dialog.open()
+
+    def on_genre_selected(self, genre):
+        """Handle the genre selection and generate a story."""
+        self.genre_dialog.dismiss()  # Close the dialog
+
+        # Fetch group data from Firebase
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
+        if not group_data:
+            toast("Failed to fetch group data.")
+            return
+
+        # Extract relevant details
+        group_description = group_data.get("description", "No description provided.")
+        members = group_data.get("members", {})  # {uid: name}
+        transactions = group_data.get("transactions", [])  # List of transaction dicts
+
+        # Create the prompt
+        prompt = ai_service.create_prompt(
+            group_name, group_description, members, transactions, genre
+        )
+
+        # Send the prompt to AI and handle the response
+        story = ai_service.send_request(prompt)
+        print(story)
+        if story:
+            self.show_story(story)
+        else:
+            toast("Failed to generate story.")
+
+    def show_story(self, story):
+        """Display the AI-generated story in a dialog."""
+        dialog = MDDialog(
+            title="Generated Story",
+            text=story,
+            buttons=[MDFlatButton(text="CLOSE", on_release=lambda x: dialog.dismiss())],
+        )
+        dialog.open()
 
 class TransactionHistoryWidget(MDBoxLayout):
     payer = StringProperty()
@@ -818,7 +900,6 @@ class AddExpenseScreen(Screen):
         if not self.category_menu.parent:
             self.category_menu.caller = button
             self.category_menu.open()
-
 
     def set_category(self, value):
         self.ids.category.text = value

@@ -134,6 +134,11 @@
             hint_text: "description"
             mode: "rectangle"
 
+        MDTextField:
+            id: category_input
+            hint_text: "Category"
+            on_focus: root.open_category_menu(self)
+
         MDRaisedButton:
             text: "Next"
             on_release: root.next_step()
@@ -259,6 +264,10 @@
             MDRaisedButton:
                 text: "Settle Up"
                 on_release: app.root.current = "settle_up_screen"
+            MDRaisedButton:
+                text: "Generate Story"
+                on_release: root.generate_story()
+
 
 
 
@@ -461,10 +470,6 @@
             hint_text: "Amount"
             input_filter: "float"
 
-        MDTextField:
-            id: currency_field
-            hint_text: "Currency (e.g., IRTT)"
-            on_focus: root.open_currency_menu(self)
 
         MDTextField:
             id: split_type
@@ -527,7 +532,7 @@
                 id: settle_up_list
 
         MDRaisedButton:
-            text: "Back to Group"
+            text: "Back"
             md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_screen"
 
@@ -604,21 +609,18 @@
             height: "100dp"
             halign: "center"
 
-        # Display the user's net balance
         MDLabel:
             id: net_balance_label
             text: "loading your net balance"
             theme_text_color: "Primary"
             halign: "center"
 
-        # Button to open notifications
         MDRaisedButton:
             text: "View Notifications"
             on_release: app.root.current = "notifications"
 
-        # Button to navigate to group manager
         MDRaisedButton:
-            text: "Back to Group Manager"
+            text: "Back"
             md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_manager"
         MDRaisedButton:

@@ -68,7 +68,6 @@ def convert_currency( amount, from_currency, info, to_currency):
 
 
 # print(f"{val:,}")
-info = fetch_currency_data()
-print(convert_currency(10, "usd", info, "gbp"))
+# print(convert_currency(10, "usd", info, "gbp"))
 #
 # fetch_currency_data()

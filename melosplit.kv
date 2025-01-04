@@ -87,7 +87,9 @@
 
         MDLabel:
             text: "Group Manager"
-            font_style: "H4"
+            font_style: 'H4'
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         ScrollView:
@@ -99,7 +101,7 @@
             on_release: root.manager.current = "add_group_screen"
 
         MDRaisedButton:
-            text: "Go to User Profile"
+            text: "User Profile"
             on_release: root.manager.current = "user_profile_screen"
 
 <AddGroupScreen>:
@@ -112,6 +114,8 @@
         MDLabel:
             text: "Add Group"
             font_style: "H4"
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         MDTextField:
@@ -136,6 +140,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: root.manager.current = "group_manager"
 
 <MemberInputsScreen>:
@@ -155,6 +160,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: root.manager.current = "add_group_screen"
 
 <MemberTemplate>:
@@ -186,6 +192,8 @@
             id: group_title
             text: "Group Screen"
             font_style: "H4"
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         BoxLayout:
@@ -193,32 +201,32 @@
             size_hint_y: None
             height: dp(56)
             spacing: 10
+            halign: "center"
 
             MDRaisedButton:
                 text: "Select Start Date"
+                md_bg_color: 0.3, 0.5, 1, 1
                 on_release: root.open_date_picker("start")
 
             MDRaisedButton:
                 text: "Select End Date"
+                md_bg_color: 0.3, 0.5, 1, 1
                 on_release: root.open_date_picker("end")
 
             MDRaisedButton:
                 text: "Filter Timeline"
+                md_bg_color: 0.3, 0.5, 1, 1
                 on_release: root.filter_transactions_by_timeline()
-
-        BoxLayout:
-            orientation: "horizontal"
-            size_hint_y: None
-            height: dp(56)
-            spacing: 10
 
             MDRaisedButton:
                 id: toggle_view_button
                 text: "Show Categorized"
+                md_bg_color: 0.3, 0.5, 1, 1
                 on_release: root.toggle_transaction_view()
 
             MDRaisedButton:
                 text: "Sort"
+                md_bg_color: 0.3, 0.5, 1, 1
                 on_release: root.open_sort_menu()
 
         ScrollView:
@@ -233,6 +241,7 @@
             
             MDRaisedButton:
                 text: "Back"
+                md_bg_color: 0.3, 0.3, 0.3, 1
                 on_release: root.manager.current = "group_manager"
 
             MDRaisedButton:
@@ -290,40 +299,45 @@
 
     BoxLayout:
         orientation: "vertical"
+        padding: "20dp" 
+        spacing: "10dp"
 
-        # Main content: Scrollable list of members' balances and contributions
         ScrollView:
             BoxLayout:
                 id: member_list
                 orientation: "vertical"
                 size_hint_y: None
                 height: self.minimum_height
+                padding: "20dp"  
 
-        # Total Expenses label
         MDLabel:
             id: total_expenses_label
             text: "Total Expenses: 0.00"
             theme_text_color: "Primary"
             size_hint_y: None
             height: "40dp"
+            font_size: "20sp"
+            halign: "center"
 
-        # Category Summary label
         MDLabel:
             id: category_summary_label
             text: "Category Summary: "
-            theme_text_color: "Secondary"
+            # theme_text_color: "Secondary"
             size_hint_y: None
             height: "40dp"
+            font_size: "18sp"
+            halign: "center"
 
-        # Buttons at the bottom
         BoxLayout:
             size_hint_y: None
             height: "50dp"
             padding: "10dp"
             spacing: "10dp"
+            halign: "center"
 
             MDRaisedButton:
                 text: "Back"
+                md_bg_color: 0.3, 0.3, 0.3, 1
                 on_release: root.go_back()
 
             MDRaisedButton:
@@ -344,9 +358,11 @@
             MDRaisedButton:
                 text: "Add Member"
                 on_release: root.open_add_member_dialog()
+
             MDRaisedButton:
                 text: "Remove Member"
                 on_release: root.open_remove_member_dialog()
+
 
 
 <AddExpenseScreen>:
@@ -411,6 +427,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_screen"
             
 <ParticipantListItem>:
@@ -487,6 +504,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_screen"
 
 <SettleUpScreen>:
@@ -500,6 +518,8 @@
         MDLabel:
             text: "Settle-Up Transactions"
             font_style: "H4"
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         ScrollView:
@@ -508,6 +528,7 @@
 
         MDRaisedButton:
             text: "Back to Group"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_screen"
 
 <SettlePaymentScreen>:
@@ -545,6 +566,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "settle_up_screen"
 
 <GraphVisualizationScreen>:
@@ -562,10 +584,9 @@
             height: "50dp"
             orientation: "horizontal"
             padding: "10dp"
-            Button:
+            MDRaisedButton:
                 text: "Back"
-                size_hint: None, None
-                size: "100dp", "40dp"
+                md_bg_color: 0.3, 0.3, 0.3, 1
                 on_release: app.root.current = "member_summary_screen"
 
 
@@ -579,6 +600,8 @@
         MDLabel:
             text: "User Profile"
             font_style: "H4"
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         # Display the user's net balance
@@ -596,9 +619,11 @@
         # Button to navigate to group manager
         MDRaisedButton:
             text: "Back to Group Manager"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "group_manager"
         MDRaisedButton:
             text: "log out"
+            md_bg_color: 0.6, 0, 0, 1
             on_release: root.logout()
 
 <NotificationScreen>:
@@ -611,6 +636,8 @@
         MDLabel:
             text: "Notifications"
             font_style: "H4"
+            size_hint: 1, None
+            height: "100dp"
             halign: "center"
 
         ScrollView:
@@ -619,6 +646,7 @@
 
         MDRaisedButton:
             text: "Back"
+            md_bg_color: 0.3, 0.3, 0.3, 1
             on_release: app.root.current = "user_profile_screen"
 
 <NotificationItem>:

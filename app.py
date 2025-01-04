@@ -25,6 +25,10 @@ from currency import *
 import json
 import os
 
+from kivy.lang import Builder 
+from kivy.core.text import LabelBase 
+from kivymd.app import MDApp 
+from kivymd.theming import ThemeManager
 
 # Firebase imports
 import firebase_admin
@@ -182,21 +186,20 @@ class GroupManagerScreen(Screen):
     def load_groups(self):
         """Load user groups dynamically into the group list."""
         user_uid = App.get_running_app().user_uid
-        # print(type(user_uid))
         self.update_user_groups_in_firebase(user_uid)
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
         groups = user_groups_ref.get() or {}
 
-        group_list = self.ids.group_list
+        group_list = self.ids.group_list  # The MDList widget
         group_list.clear_widgets()
+
         for group_name in groups:
-            # Properly handle the button instance passed by on_release
-            group_list.add_widget(
-                MDRaisedButton(
-                    text=group_name,
-                    on_release=lambda btn, group=group_name: self.go_to_group_screen(group),
-                )
+            # Add each group as a list item with a clickable action
+            item = OneLineListItem(
+                text=group_name,
+                on_release=lambda btn, group=group_name: self.go_to_group_screen(group),
             )
+            group_list.add_widget(item)
 
     def update_user_groups_in_firebase(self, member_uid):
         """
@@ -224,7 +227,6 @@ class GroupManagerScreen(Screen):
         # Update the user's group list in Firebase
         user_groups_ref.set(user_groups)
 
-
     def go_to_group_screen(self, group_name):
         """Navigate to the selected group's screen and initialize the_group."""
         global the_group
@@ -247,16 +249,15 @@ class GroupManagerScreen(Screen):
         # Initialize the global Group instance
         the_group = Group(
             name=group_name,
-            members= group_data.get("members", {}),
+            members=group_data.get("members", {}),
             edges=edges,
-            # transactions=list(group_data.get("transactions", {}).values()),
             recurring_bills=list(group_data.get("recurring_bills", [])),
             category_totals=defaultdict(float, group_data.get("category_totals", {})),
         )
 
-        App.get_running_app().group_name = group_name 
-        # print(dict(the_group.graph.edges))
+        App.get_running_app().group_name = group_name
         self.manager.current = "group_screen"
+
 
 
 class AddGroupScreen(Screen):
@@ -596,18 +597,21 @@ class MemberSummaryScreen(Screen):
 
         # Add each member's information
         for member, balance in balances.items():
-            member_summary = f"{member}: Net Balance: {balance:.2f}"
+            member_summary = f"{member}:\n Net Balance: {balance:.2f}"
             contribution = summary["per_member_contributions"].get(member, 0)
-            member_summary += f", Contribution: {contribution:.2f}"
+            member_summary += f"\n Contribution: {contribution:.2f}"
 
             # Create a label for the member's data and add it to the list
             self.ids.member_list.add_widget(
-                MDLabel(text=member_summary, theme_text_color="Secondary", size_hint_y=None, height="40dp")
+                MDLabel(text=member_summary, theme_text_color="Primary", size_hint_y=None, height="40dp", halign='center')
+            )
+            self.ids.member_list.add_widget(
+                MDLabel(text="\n\n\n", theme_text_color="Primary", size_hint_y=None, height="40dp", halign='center')
             )
 
         # Display total expenses
         total_expenses = summary["total_expenses"]
-        self.ids.total_expenses_label.text = f"Total Expenses: {total_expenses:.2f}"
+        self.ids.total_expenses_label.text = f"Total Expenses: {total_expenses:.2f} thousand Tomans"
 
         # Optional: Add category breakdown
         category_summary = summary["category_summary"]
@@ -1805,6 +1809,13 @@ class MeloSplit(MDApp):
         self.amount = 0
 
     def build(self):
+        LabelBase.register(name='MyFont1', fn_regular='Gilroy-Heavy.ttf') # Set custom font styles for KivyMD 
+        LabelBase.register(name='MyFont2', fn_regular='Gilroy-Bold.ttf') # Set custom font styles for KivyMD 
+        LabelBase.register(name='MyFont3', fn_regular='Gilroy-Medium.ttf') # Set custom font styles for KivyMD 
+        LabelBase.register(name='MyFont4', fn_regular='Gilroy-Light.ttf') # Set custom font styles for KivyMD 
+        self.theme_cls.font_styles["H4"] = ["MyFont1", 40, False, 0.15] 
+        self.theme_cls.font_styles["H6"] = ["MyFont2", 20, False, 0.15] 
+        self.theme_cls.font_styles["Body1"] = ["MyFont3", 16, False, -0.05]
         self.user_uid = None  # Initialize user UID
         self.user_email = None  # Initialize user email
         root = MyScreenManager()  # Initialize root first

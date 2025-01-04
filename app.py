@@ -24,8 +24,7 @@ import networkx as nx
 from currency import *
 import json
 import os
-
-from kivy.lang import Builder 
+from ai import AIServicefrom kivy.lang import Builder 
 from kivy.core.text import LabelBase 
 from kivymd.app import MDApp 
 from kivymd.theming import ThemeManager

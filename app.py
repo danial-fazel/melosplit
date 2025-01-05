@@ -260,6 +260,38 @@ class GroupManagerScreen(Screen):
 
         App.get_running_app().group_name = group_name
         self.manager.current = "group_screen"
+    def open_delete_group_dialog(self):
+        """Open the GroupDialog to select groups for deletion."""
+        user_uid = App.get_running_app().user_uid
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+        groups = user_groups_ref.get() or {}
+
+        def handle_selected_groups(selected_groups):
+            self.delete_selected_groups(selected_groups)
+
+        self.group_dialog = GroupDialog(groups=groups.keys(), on_submit=handle_selected_groups)
+        self.group_dialog.open()
+
+    def delete_selected_groups(self, selected_groups):
+        """Delete the selected groups from Firebase."""
+        if not selected_groups:
+            toast("No groups selected for deletion.")
+            return
+
+        groups_ref = db.reference("/groups")
+        user_uid = App.get_running_app().user_uid
+        user_groups_ref = db.reference(f"users/{user_uid}/groups")
+
+        for group_name in selected_groups:
+            # Remove group data
+            group_ref = groups_ref.child(group_name)
+            group_ref.delete()
+
+            # Remove group from user's groups
+            user_groups_ref.child(group_name).delete()
+
+        toast(f"Deleted {len(selected_groups)} groups successfully.")
+        self.load_groups()  # Refresh the group list
 
 
 
@@ -647,6 +679,7 @@ class GroupScreen(Screen):
             buttons=[MDFlatButton(text="CLOSE", on_release=lambda x: dialog.dismiss())],
         )
         dialog.open()
+
 
 class TransactionHistoryWidget(MDBoxLayout):
     payer = StringProperty()
@@ -1252,6 +1285,73 @@ class MembersDialog:
             return "Shares"
         return ""
 
+class GroupDialog:
+    def __init__(self, groups, on_submit, action="Delete"):
+        """
+        :param groups: Dictionary of group names.
+        :param on_submit: Callback function to handle selected groups.
+        :param action: The action type (e.g., "Delete").
+        """
+        self.groups = groups
+        self.action = action
+        self.selected_groups = set()  # To store selected group names
+        self.on_submit = on_submit
+
+        # Create dialog content
+        self.dialog_content = MDBoxLayout(orientation="vertical", spacing=10, size_hint_y=None)
+        self.dialog_content.height = len(groups) * 60 + 20
+
+        scroll = ScrollView()
+        list_view = MDList()
+
+        # Add group checkboxes
+        for group_name in groups:
+            item = MDBoxLayout(orientation="horizontal", spacing=10, size_hint_y=None, height=60)
+
+            # Add a checkbox for each group
+            checkbox = MDCheckbox(size_hint_x=0.1)
+            checkbox.bind(active=lambda _, active, group_name=group_name: self.toggle_selection(active, group_name))
+            item.add_widget(checkbox)
+
+            # Add group name label
+            label = MDLabel(text=group_name, size_hint_x=0.9)
+            item.add_widget(label)
+
+            list_view.add_widget(item)
+
+        scroll.add_widget(list_view)
+        self.dialog_content.add_widget(scroll)
+
+        # Create the dialog
+        self.dialog = MDDialog(
+            title=f"{self.action} Groups",
+            type="custom",
+            content_cls=self.dialog_content,
+            buttons=[
+                MDFlatButton(text="CANCEL", on_release=self.dismiss),
+                MDRaisedButton(text="OK", on_release=self.submit),
+            ],
+        )
+
+    def toggle_selection(self, active, group_name):
+        """Toggle group selection."""
+        if active:
+            self.selected_groups.add(group_name)
+        else:
+            self.selected_groups.discard(group_name)
+
+    def open(self):
+        """Open the dialog."""
+        self.dialog.open()
+
+    def dismiss(self, *args):
+        """Close the dialog."""
+        self.dialog.dismiss()
+
+    def submit(self, *args):
+        """Submit selected groups."""
+        self.on_submit(self.selected_groups)
+        self.dismiss()
 
 class AddRecurringBillScreen(Screen):
     def __init__(self, **kwargs):

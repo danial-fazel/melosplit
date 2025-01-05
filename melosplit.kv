@@ -103,6 +103,10 @@
         MDRaisedButton:
             text: "User Profile"
             on_release: root.manager.current = "user_profile_screen"
+        MDRaisedButton:
+            text: "Delete Group"
+            on_release: root.open_delete_group_dialog()
+
 
 <AddGroupScreen>:
     name: "add_group_screen"

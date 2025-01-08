@@ -1,6 +1,6 @@
 import requests
 def fetch_currency_data():
-    API_KEY = "freemuftwTobkIJykSRRw9j63J0Ugko8"
+    API_KEY = "freedKUooRvZgPcXI1amFxNGda4OJMzO"
     API_URL = f"http://api.navasan.tech/latest/?api_key={API_KEY}"
 
     try:

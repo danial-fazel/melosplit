@@ -1,6 +1,8 @@
 import requests
+from decouple import config
 def fetch_currency_data():
-    API_KEY = "freedKUooRvZgPcXI1amFxNGda4OJMzO"
+    
+    API_KEY = config("NAVASAN_API_KEY")
     API_URL = f"http://api.navasan.tech/latest/?api_key={API_KEY}"
 
     try:

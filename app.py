@@ -29,25 +29,23 @@ from kivy.lang import Builder
 from kivy.core.text import LabelBase 
 from kivymd.app import MDApp 
 from kivymd.theming import ThemeManager
-
+from decouple import config
 from ai import AIService
 # Firebase imports
 import firebase_admin
 from firebase_admin import credentials, db
 # Initialize Firebase
-cred = credentials.Certificate("melosplit-firebase.json")
-firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"
-})
+
+cred_path = config("FIREBASE_CREDENTIALS")
+cred = credentials.Certificate(cred_path)
+firebase_admin.initialize_app(cred, {"databaseURL": "https://melosplit-default-rtdb.firebaseio.com/"})
 
 # Initialize the AI service with our API key
-from decouple import config
+
 
 api_key = config("HUGGINGFACE_API_KEY")
 
 ai_service = AIService(api_key)
-
-print(api_key)  # This should print your API key from the .env file
 
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')

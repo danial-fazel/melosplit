@@ -41,8 +41,14 @@ firebase_admin.initialize_app(cred, {
 })
 
 # Initialize the AI service with our API key
-# ai_service = AIService(api_key="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")
-ai_service = AIService(api_key="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")
+from decouple import config
+
+api_key = config("HUGGINGFACE_API_KEY")
+
+ai_service = AIService(api_key)
+
+print(api_key)  # This should print your API key from the .env file
+
 def add_user_to_firebase(email, name):
     at_sign = email.find('@')
     email = email[:at_sign]
@@ -281,8 +287,15 @@ class GroupManagerScreen(Screen):
         groups_ref = db.reference("/groups")
         user_uid = App.get_running_app().user_uid
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
-
+        
         for group_name in selected_groups:
+            group_ref = db.reference(f"groups/{group_name}")
+            group_data = group_ref.get()        
+            admin_data = group_data.get("admin")
+            
+            if App.get_running_app().user_uid != admin_data:
+                toast("Only Admin can remove members")
+                return
             # Remove group data
             group_ref = groups_ref.child(group_name)
             group_ref.delete()
@@ -403,6 +416,11 @@ class MemberInputsScreen(Screen):
             "members": {m["uid"] or m["name"]: m["name"] for m in members},
         }#TODO: mark the fake uids
         group_ref.set(members_data)
+
+        admin_data = {
+            "admin": user_uid,
+        }
+        group_ref.update(admin_data)###admin 
 
         # Add the group to the user's groups;
         user_groups_ref = db.reference(f"users/{user_uid}/groups")
@@ -805,8 +823,18 @@ class MemberSummaryScreen(Screen):
         global the_group
         selected_members = self.selected_members_to_remove
 
+        group_name = App.get_running_app().group_name
+        group_ref = db.reference(f"groups/{group_name}")
+        group_data = group_ref.get()
+
         if not selected_members:
             toast("No members selected for removal.")
+            return
+        
+        admin_data = group_data.get("admin")
+        print(admin_data)
+        if App.get_running_app().user_uid != admin_data:
+            toast("Only Admin can remove members")
             return
 
         for uid in selected_members:

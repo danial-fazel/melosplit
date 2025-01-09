@@ -33,7 +33,7 @@ def fetch_currency_data():
         return None
 
 # testing:
-# print(fetch_currency_data())
+print(fetch_currency_data())
 
 def convert_currency( amount, from_currency, info, to_currency):
     """

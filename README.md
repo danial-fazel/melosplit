@@ -111,6 +111,7 @@ MeloSplit/
 ├── logic.py              # Business logic for group and expense management
 ├── melosplit.kv          # Kivy UI definitions
 ├── my_metworkx.py        # modified graph visualization
+├── currency.py           # convert currencies
 ├── requirements.txt      # Python dependencies
 ├── serviceAccountKey.json # Firebase admin credentials (not included in GitHub)
 ├── .env                  # Environment variables (ignored in GitHub)

@@ -10,6 +10,7 @@ MeloSplit is a group expense management application designed to help users easil
 - **Expense Tracking**: Add, split, and settle expenses among group members.
 - **Recurring Bills**: Manage recurring expenses with adjustable due dates.
 - **AI Storytelling**: Generate engaging stories about group activities using AI.
+- **Currency exchanger**: converting currencies most usefull.
 - **Settle Up**: Simplify transactions and track payments between group members.
 
 ---
@@ -51,15 +52,15 @@ firebase_admin.initialize_app(cred, {"databaseURL": "https://your-database.fireb
 ---
 
 ### 4. **Configure APIs**
-#### Generate an Hugging Face API Key:
+#### Generate a Hugging Face API Key:
 - Visit [Hugging Face](https://huggingface.co/).
 - Sign up and create a new API key under your account settings.
 
-#### Generate an Currency exchanger API Key:
+#### Generate a Currency exchanger API Key:
 - Visit [Navasan telegram bot](https://t.me/navasan_contact_bot).
 - create a new API key under your account settings.
 
-#### Add the Key to `.env`:
+#### Add Keys to the `.env`:
 1. Create a file named `.env` in the project root:
 ```plaintext
 HUGGINGFACE_API_KEY=your_huggingface_api_key
@@ -96,6 +97,9 @@ python app.py
 
 5. **Generate Stories**:
    - Select a story genre and generate AI-driven stories about group activities.
+
+6. **converted currency**:
+   - the currencies are converted to most used ones, but you can adjust in the code to get your desirable ones too.
 
 ---
 

@@ -50,10 +50,14 @@ firebase_admin.initialize_app(cred, {"databaseURL": "https://your-database.fireb
 
 ---
 
-### 4. **Configure Hugging Face API**
-#### Generate an API Key:
+### 4. **Configure APIs**
+#### Generate an Hugging Face API Key:
 - Visit [Hugging Face](https://huggingface.co/).
 - Sign up and create a new API key under your account settings.
+
+#### Generate an Currency exchanger API Key:
+- Visit [Navasan telegram bot](https://t.me/navasan_contact_bot).
+- create a new API key under your account settings.
 
 #### Add the Key to `.env`:
 1. Create a file named `.env` in the project root:
